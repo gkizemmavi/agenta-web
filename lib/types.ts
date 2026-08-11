@@ -43,6 +43,9 @@ export interface ContentDoc {
   status: ModerationStatus;
   createdAt?: Date | null;
   ownerName?: string;
+  publisherName?: string;
+  publisherAvatarUrl?: string;
+  publisherFollowerCount?: number;
 }
 
 export interface ListingDoc {

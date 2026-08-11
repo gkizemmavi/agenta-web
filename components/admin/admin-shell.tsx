@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   LogOut,
   FileClock,
+  FilePlus2,
   UserRound,
   Wrench,
   BadgeCheck,
@@ -38,6 +39,12 @@ const nav: NavItem[] = [
     label: "Onay işlemleri",
     icon: FileClock,
     match: { pathname: "/admin/contents", status: "pending" },
+  },
+  {
+    href: "/admin/contents?status=approved",
+    label: "İçerik paylaş / yayınlanan",
+    icon: FilePlus2,
+    match: { pathname: "/admin/contents", status: "approved" },
   },
   {
     href: "/admin/applications?status=pending&type=individual",

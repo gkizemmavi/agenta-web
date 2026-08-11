@@ -177,6 +177,12 @@ export function mapContent(id: string, data: DocumentData): ContentDoc {
       ? status
       : "pending",
     createdAt: toDate(data.createdAt),
+    publisherName: asString(data.publisherName) || undefined,
+    publisherAvatarUrl: asString(data.publisherAvatarUrl) || undefined,
+    publisherFollowerCount:
+      data.publisherFollowerCount == null
+        ? undefined
+        : asNumber(data.publisherFollowerCount),
   };
 }
 

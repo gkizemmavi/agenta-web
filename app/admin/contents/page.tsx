@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { format } from "date-fns";
-import { Check, Pencil, Trash2, X } from "lucide-react";
+import { Check, Pencil, Plus, Trash2, X } from "lucide-react";
 import {
   deleteContent,
   fetchContentsPage,
@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { ContentMedia } from "@/components/admin/content-media";
+import { ContentComposeModal } from "@/components/admin/content-compose-modal";
 import { PaginationBar } from "@/components/ui/pagination-bar";
 
 const filters: { key: ModerationStatus | "all"; label: string }[] = [
@@ -53,6 +54,7 @@ function AdminContentsInner() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [editItem, setEditItem] = useState<ContentDoc | null>(null);
   const [editText, setEditText] = useState("");
+  const [composeOpen, setComposeOpen] = useState(false);
 
   useEffect(() => {
     if (["pending", "approved", "rejected", "all"].includes(initial)) {
@@ -123,11 +125,15 @@ function AdminContentsInner() {
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight">İçerikler</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Mobilden paylaşılan içerikleri onaylayın veya reddedin. Sayfa başı{" "}
-            {pageSize} kayıt.
+            Mobilden gelenleri onaylayın veya kendiniz içerik yayınlayın. Sayfa
+            başı {pageSize} kayıt.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" onClick={() => setComposeOpen(true)}>
+            <Plus size={16} />
+            İçerik paylaş
+          </Button>
           {filters.map((f) => (
             <button
               key={f.key}
@@ -191,7 +197,13 @@ function AdminContentsInner() {
                   </span>
                 </div>
                 <div className="text-xs text-slate-400">
-                  {item.mediaType} · owner: {item.ownerUid.slice(0, 8)}…
+                  {item.mediaType}
+                  {item.publisherName
+                    ? ` · yayıncı: ${item.publisherName}`
+                    : ` · owner: ${item.ownerUid.slice(0, 8)}…`}
+                  {item.publisherFollowerCount != null
+                    ? ` · ${item.publisherFollowerCount} takipçi`
+                    : ""}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {item.status !== "approved" ? (
@@ -243,6 +255,15 @@ function AdminContentsInner() {
         onNext={onNext}
         pageSize={pageSize}
         itemCount={items.length}
+      />
+
+      <ContentComposeModal
+        open={composeOpen}
+        onClose={() => setComposeOpen(false)}
+        onPublished={() => {
+          if (status === "approved") reload();
+          else setStatus("approved");
+        }}
       />
 
       <Modal
