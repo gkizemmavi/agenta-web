@@ -16,7 +16,7 @@ import {
   type User,
 } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "./firebase";
+import { getFirebaseAuth, getFirestoreDb } from "./firebase";
 
 type AuthState = {
   user: User | null;
@@ -40,7 +40,7 @@ async function checkIsAdmin(user: User): Promise<boolean> {
     return true;
   }
 
-  const snap = await getDoc(doc(db, "users", user.uid));
+  const snap = await getDoc(doc(getFirestoreDb(), "users", user.uid));
   if (!snap.exists()) return false;
   return Boolean(snap.data()?.isAdmin);
 }
@@ -52,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const auth = getFirebaseAuth();
     const unsub = onAuthStateChanged(auth, async (next) => {
       setLoading(true);
       try {
@@ -80,6 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     setError(null);
     setLoading(true);
+    const auth = getFirebaseAuth();
     try {
       const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
       const admin = await checkIsAdmin(cred.user);
@@ -104,7 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    await firebaseSignOut(auth);
+    await firebaseSignOut(getFirebaseAuth());
     setUser(null);
     setIsAdmin(false);
   }, []);

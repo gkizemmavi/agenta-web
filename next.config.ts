@@ -2,7 +2,9 @@ import type { NextConfig } from "next";
 import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 
 const nextConfig: NextConfig = {
+  // Cloudflare Workers: skip Next image optimizer (needs IMAGES binding).
   images: {
+    unoptimized: true,
     remotePatterns: [
       {
         protocol: "https",

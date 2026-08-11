@@ -1,13 +1,14 @@
-import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
+import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
+import { getAuth, type Auth } from "firebase/auth";
+import { getFirestore, type Firestore } from "firebase/firestore";
+import { getStorage, type FirebaseStorage } from "firebase/storage";
 
 /**
  * Firebase web config is public (shipped to the browser).
  * Env vars override defaults so local/.env.local still works.
- * Defaults keep Cloudflare/CI builds from failing with auth/invalid-api-key
- * when secrets are not injected at build time.
+ *
+ * IMPORTANT: Never initialize Auth/Firestore at module load time — that
+ * crashes Cloudflare Workers SSR (no browser IndexedDB / window).
  */
 const firebaseConfig = {
   apiKey:
@@ -29,12 +30,56 @@ const firebaseConfig = {
     process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || "G-R0D84J88GN",
 };
 
-function createFirebaseApp() {
-  if (getApps().length) return getApp();
-  return initializeApp(firebaseConfig);
+let app: FirebaseApp | undefined;
+let authInstance: Auth | undefined;
+let dbInstance: Firestore | undefined;
+let storageInstance: FirebaseStorage | undefined;
+
+function assertBrowser() {
+  if (typeof window === "undefined") {
+    throw new Error("Firebase is only available in the browser");
+  }
 }
 
-export const app = createFirebaseApp();
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-export const storage = getStorage(app);
+export function getFirebaseApp(): FirebaseApp {
+  assertBrowser();
+  if (!app) {
+    app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+  }
+  return app;
+}
+
+export function getFirebaseAuth(): Auth {
+  assertBrowser();
+  if (!authInstance) authInstance = getAuth(getFirebaseApp());
+  return authInstance;
+}
+
+export function getFirestoreDb(): Firestore {
+  assertBrowser();
+  if (!dbInstance) dbInstance = getFirestore(getFirebaseApp());
+  return dbInstance;
+}
+
+export function getFirebaseStorage(): FirebaseStorage {
+  assertBrowser();
+  if (!storageInstance) storageInstance = getStorage(getFirebaseApp());
+  return storageInstance;
+}
+
+/** Lazy proxy — safe to import on the server; only touches Firebase in the browser. */
+export const db = new Proxy({} as Firestore, {
+  get(_target, prop, receiver) {
+    const real = getFirestoreDb();
+    const value = Reflect.get(real as object, prop, receiver);
+    return typeof value === "function" ? value.bind(real) : value;
+  },
+});
+
+export const storage = new Proxy({} as FirebaseStorage, {
+  get(_target, prop, receiver) {
+    const real = getFirebaseStorage();
+    const value = Reflect.get(real as object, prop, receiver);
+    return typeof value === "function" ? value.bind(real) : value;
+  },
+});
