@@ -88,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!admin) {
         await firebaseSignOut(auth);
         throw new Error(
-          "Bu hesap admin değil. Firestore users/{uid} üzerinde isAdmin: true ayarlayın.",
+          "Hesap bulunamadı!",
         );
       }
       setUser(cred.user);
