@@ -9,6 +9,7 @@ import { getStorage, type FirebaseStorage } from "firebase/storage";
  *
  * IMPORTANT: Never initialize Auth/Firestore at module load time — that
  * crashes Cloudflare Workers SSR (no browser IndexedDB / window).
+ * Always call getFirebaseAuth() / getFirestoreDb() from client-side code.
  */
 const firebaseConfig = {
   apiKey:
@@ -66,20 +67,3 @@ export function getFirebaseStorage(): FirebaseStorage {
   if (!storageInstance) storageInstance = getStorage(getFirebaseApp());
   return storageInstance;
 }
-
-/** Lazy proxy — safe to import on the server; only touches Firebase in the browser. */
-export const db = new Proxy({} as Firestore, {
-  get(_target, prop, receiver) {
-    const real = getFirestoreDb();
-    const value = Reflect.get(real as object, prop, receiver);
-    return typeof value === "function" ? value.bind(real) : value;
-  },
-});
-
-export const storage = new Proxy({} as FirebaseStorage, {
-  get(_target, prop, receiver) {
-    const real = getFirebaseStorage();
-    const value = Reflect.get(real as object, prop, receiver);
-    return typeof value === "function" ? value.bind(real) : value;
-  },
-});

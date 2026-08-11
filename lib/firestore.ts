@@ -13,7 +13,7 @@ import {
   type DocumentData,
   type QueryConstraint,
 } from "firebase/firestore";
-import { db } from "./firebase";
+import { getFirestoreDb } from "./firebase";
 import {
   agentTypeLabel,
   LISTING_COLLECTIONS,
@@ -69,13 +69,13 @@ export function mapUser(id: string, data: DocumentData): UserDoc {
 }
 
 export async function fetchUsers(max = 200): Promise<UserDoc[]> {
-  const q = query(collection(db, "users"), orderBy("createdAt", "desc"), limit(max));
+  const q = query(collection(getFirestoreDb(), "users"), orderBy("createdAt", "desc"), limit(max));
   const snap = await getDocs(q);
   return snap.docs.map((d) => mapUser(d.id, d.data()));
 }
 
 export async function fetchUser(uid: string): Promise<UserDoc | null> {
-  const snap = await getDoc(doc(db, "users", uid));
+  const snap = await getDoc(doc(getFirestoreDb(), "users", uid));
   if (!snap.exists()) return null;
   return mapUser(snap.id, snap.data());
 }
@@ -96,14 +96,14 @@ export async function updateUser(
     >
   >,
 ): Promise<void> {
-  await updateDoc(doc(db, "users", uid), {
+  await updateDoc(doc(getFirestoreDb(), "users", uid), {
     ...data,
     updatedAt: Timestamp.now(),
   });
 }
 
 export async function deleteUserDoc(uid: string): Promise<void> {
-  await deleteDoc(doc(db, "users", uid));
+  await deleteDoc(doc(getFirestoreDb(), "users", uid));
 }
 
 export function mapContent(id: string, data: DocumentData): ContentDoc {
@@ -146,12 +146,12 @@ export async function fetchContents(opts?: {
   constraints.push(limit(opts?.max ?? 100));
 
   try {
-    const snap = await getDocs(query(collection(db, "contents"), ...constraints));
+    const snap = await getDocs(query(collection(getFirestoreDb(), "contents"), ...constraints));
     return snap.docs.map((d) => mapContent(d.id, d.data()));
   } catch {
     // Fallback when composite index is missing or legacy docs lack status.
     const snap = await getDocs(
-      query(collection(db, "contents"), orderBy("createdAt", "desc"), limit(opts?.max ?? 100)),
+      query(collection(getFirestoreDb(), "contents"), orderBy("createdAt", "desc"), limit(opts?.max ?? 100)),
     );
     let items = snap.docs.map((d) => mapContent(d.id, d.data()));
     if (opts?.status && opts.status !== "all") {
@@ -168,7 +168,7 @@ export async function setContentStatus(
   id: string,
   status: ModerationStatus,
 ): Promise<void> {
-  await updateDoc(doc(db, "contents", id), {
+  await updateDoc(doc(getFirestoreDb(), "contents", id), {
     status,
     moderatedAt: Timestamp.now(),
   });
@@ -178,14 +178,14 @@ export async function updateContent(
   id: string,
   data: Partial<Pick<ContentDoc, "description" | "status">>,
 ): Promise<void> {
-  await updateDoc(doc(db, "contents", id), {
+  await updateDoc(doc(getFirestoreDb(), "contents", id), {
     ...data,
     updatedAt: Timestamp.now(),
   });
 }
 
 export async function deleteContent(id: string): Promise<void> {
-  await deleteDoc(doc(db, "contents", id));
+  await deleteDoc(doc(getFirestoreDb(), "contents", id));
 }
 
 function listingTitle(data: DocumentData, collectionName: ListingCollection): string {
@@ -244,10 +244,10 @@ export async function fetchListings(opts?: {
         if (opts?.ownerUid) constraints.push(where("ownerUid", "==", opts.ownerUid));
         constraints.push(orderBy("createdAt", "desc"));
         constraints.push(limit(opts?.max ?? 80));
-        const snap = await getDocs(query(collection(db, key), ...constraints));
+        const snap = await getDocs(query(collection(getFirestoreDb(), key), ...constraints));
         return snap.docs.map((d) => mapListing(d.id, key, d.data()));
       } catch {
-        const snap = await getDocs(query(collection(db, key), limit(opts?.max ?? 80)));
+        const snap = await getDocs(query(collection(getFirestoreDb(), key), limit(opts?.max ?? 80)));
         let items = snap.docs.map((d) => mapListing(d.id, key, d.data()));
         if (opts?.ownerUid) items = items.filter((l) => l.ownerUid === opts.ownerUid);
         return items;
@@ -268,7 +268,7 @@ export async function updateListing(
   id: string,
   data: Record<string, unknown>,
 ): Promise<void> {
-  await updateDoc(doc(db, collectionName, id), {
+  await updateDoc(doc(getFirestoreDb(), collectionName, id), {
     ...data,
     updatedAt: Timestamp.now(),
   });
@@ -278,13 +278,13 @@ export async function deleteListing(
   collectionName: ListingCollection,
   id: string,
 ): Promise<void> {
-  await deleteDoc(doc(db, collectionName, id));
+  await deleteDoc(doc(getFirestoreDb(), collectionName, id));
 }
 
 export async function fetchAgentApplications(
   status: AgentAppStatus | "all" = "all",
 ): Promise<AgentApplication[]> {
-  const snap = await getDocs(collection(db, "agents"));
+  const snap = await getDocs(collection(getFirestoreDb(), "agents"));
   const apps: AgentApplication[] = [];
 
   for (const d of snap.docs) {
@@ -301,7 +301,7 @@ export async function fetchAgentApplications(
     let avatarUrl: string | null = null;
 
     try {
-      const userSnap = await getDoc(doc(db, "users", d.id));
+      const userSnap = await getDoc(doc(getFirestoreDb(), "users", d.id));
       if (userSnap.exists()) {
         const u = userSnap.data();
         userName = asString(u.fullName) || asString(u.nickname);
@@ -344,7 +344,7 @@ export async function setAgentApplicationStatus(
   status: AgentAppStatus,
   options?: { normalizeType?: boolean },
 ): Promise<void> {
-  const ref = doc(db, "agents", id);
+  const ref = doc(getFirestoreDb(), "agents", id);
   const snap = await getDoc(ref);
   if (!snap.exists()) throw new Error("Başvuru bulunamadı");
 
@@ -363,7 +363,7 @@ export async function setAgentApplicationStatus(
   }
 
   if (status === "approved") {
-    const userSnap = await getDoc(doc(db, "users", id));
+    const userSnap = await getDoc(doc(getFirestoreDb(), "users", id));
     if (userSnap.exists()) {
       const u = userSnap.data();
       payload.name =
@@ -380,17 +380,17 @@ export async function setAgentApplicationStatus(
 }
 
 export async function deleteAgentApplication(id: string): Promise<void> {
-  await deleteDoc(doc(db, "agents", id));
+  await deleteDoc(doc(getFirestoreDb(), "agents", id));
 }
 
 export async function fetchDashboardStats() {
   const [users, contents, agents, listings] = await Promise.all([
-    getDocs(query(collection(db, "users"), limit(500))),
-    getDocs(query(collection(db, "contents"), limit(500))),
-    getDocs(collection(db, "agents")),
+    getDocs(query(collection(getFirestoreDb(), "users"), limit(500))),
+    getDocs(query(collection(getFirestoreDb(), "contents"), limit(500))),
+    getDocs(collection(getFirestoreDb(), "agents")),
     Promise.all(
       LISTING_COLLECTIONS.map(({ key }) =>
-        getDocs(query(collection(db, key), limit(200))),
+        getDocs(query(collection(getFirestoreDb(), key), limit(200))),
       ),
     ),
   ]);
