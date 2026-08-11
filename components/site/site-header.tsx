@@ -32,15 +32,21 @@ export function SiteHeader() {
           </Link>
 
           <nav className="flex items-center gap-1 sm:gap-2">
+            <a
+              href="#indir"
+              className="hidden rounded-lg px-3 py-2 text-sm font-medium text-zinc-300 hover:bg-white/5 hover:text-white sm:inline-flex"
+            >
+              İndir
+            </a>
             <Link
               href="/privacy-policy.html"
-              className="hidden rounded-lg px-3 py-2 text-sm font-medium text-zinc-300 hover:bg-white/5 hover:text-white sm:inline-flex"
+              className="hidden rounded-lg px-3 py-2 text-sm font-medium text-zinc-300 hover:bg-white/5 hover:text-white md:inline-flex"
             >
               Gizlilik
             </Link>
             <Link
               href="/terms-of-use.html"
-              className="hidden rounded-lg px-3 py-2 text-sm font-medium text-zinc-300 hover:bg-white/5 hover:text-white sm:inline-flex"
+              className="hidden rounded-lg px-3 py-2 text-sm font-medium text-zinc-300 hover:bg-white/5 hover:text-white md:inline-flex"
             >
               Koşullar
             </Link>

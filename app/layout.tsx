@@ -3,8 +3,9 @@ import { Providers } from "@/components/providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Agenta Admin",
-  description: "Agenta yönetim paneli ve yasal sayfalar",
+  title: "Agenta — Araç, emlak ve ikinci el pazarı",
+  description:
+    "Agenta ile ilan ver, açık artırmaya katıl, ajanlarla çalış. App Store ve Google Play'den indir.",
   icons: { icon: "/logo.png" },
 };
 
