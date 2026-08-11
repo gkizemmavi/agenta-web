@@ -118,6 +118,7 @@ export function mapContent(id: string, data: DocumentData): ContentDoc {
     id,
     ownerUid: asString(data.ownerUid),
     mediaUrl: asString(data.mediaUrl),
+    mediaPath: asString(data.mediaPath) || undefined,
     mediaType: asString(data.mediaType, "image"),
     description: asString(data.description),
     likeCount: asNumber(data.likeCount),

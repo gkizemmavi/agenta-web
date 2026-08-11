@@ -18,6 +18,7 @@ import type { ContentDoc, ListingDoc, UserDoc } from "@/lib/types";
 import { LISTING_COLLECTIONS } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ContentMedia } from "@/components/admin/content-media";
 
 export default function AdminUserDetailPage() {
   const params = useParams<{ uid: string }>();
@@ -262,11 +263,11 @@ export default function AdminUserDetailPage() {
                 key={c.id}
                 className="overflow-hidden rounded-2xl border border-slate-200 bg-white"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={c.mediaUrl}
-                  alt=""
-                  className="aspect-video w-full object-cover"
+                <ContentMedia
+                  mediaUrl={c.mediaUrl}
+                  mediaPath={c.mediaPath}
+                  mediaType={c.mediaType}
+                  className="aspect-video"
                 />
                 <div className="space-y-2 p-3">
                   <Badge tone={c.status}>{c.status}</Badge>

@@ -34,6 +34,7 @@ export interface ContentDoc {
   id: string;
   ownerUid: string;
   mediaUrl: string;
+  mediaPath?: string;
   mediaType: string;
   description: string;
   likeCount: number;

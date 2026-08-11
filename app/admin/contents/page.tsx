@@ -14,6 +14,7 @@ import type { ContentDoc, ModerationStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
+import { ContentMedia } from "@/components/admin/content-media";
 
 const filters: { key: ModerationStatus | "all"; label: string }[] = [
   { key: "pending", label: "Bekleyen" },
@@ -163,24 +164,13 @@ function AdminContentsInner() {
               key={item.id}
               className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
             >
-              <div className="relative aspect-[4/5] bg-slate-100">
-                {item.mediaType === "video" || item.mediaType === "external" ? (
-                  <video
-                    src={item.mediaUrl}
-                    className="h-full w-full object-cover"
-                    controls
-                    muted
-                    playsInline
-                  />
-                ) : (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={item.mediaUrl}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
-                )}
-                <div className="absolute left-3 top-3">
+              <div className="relative">
+                <ContentMedia
+                  mediaUrl={item.mediaUrl}
+                  mediaPath={item.mediaPath}
+                  mediaType={item.mediaType}
+                />
+                <div className="absolute left-3 top-3 z-10">
                   <Badge tone={item.status}>{item.status}</Badge>
                 </div>
               </div>
@@ -199,7 +189,7 @@ function AdminContentsInner() {
                   </span>
                 </div>
                 <div className="text-xs text-slate-400">
-                  owner: {item.ownerUid.slice(0, 8)}…
+                  {item.mediaType} · owner: {item.ownerUid.slice(0, 8)}…
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {item.status !== "approved" ? (

@@ -79,6 +79,14 @@ Canlı site domain’inizi Firebase’e ekleyin:
 1. Firebase Console → **Authentication** → **Settings** → **Authorized domains**
 2. Cloudflare worker URL’nizi ekleyin (örn. `agenta-web.<account>.workers.dev` veya custom domain)
 
+### Storage CORS (opsiyonel)
+
+Videolar admin panelde artık auth’lu Storage `getBlob` ile yüklenir. Direkt URL oynatma için:
+
+```bash
+gsutil cors set storage-cors.json gs://agenta-c1d6b.firebasestorage.app
+```
+
 ## Yasal URL’ler
 
 - `/privacy-policy` → Privacy Policy
