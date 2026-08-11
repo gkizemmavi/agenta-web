@@ -1,43 +1,53 @@
-# agenta-web
+# Agenta Web — Next.js Admin Panel
 
-Agenta mobil uygulaması için statik yasal sayfalar (Firebase Hosting’e hazır).
+Agenta mobil uygulaması için yönetim paneli ve yasal sayfalar.
 
-## Sayfalar
+## Özellikler
 
-| URL | Açıklama |
-| --- | --- |
-| `/` | Ana sayfa |
-| `/privacy-policy` | Gizlilik Politikası (TR / EN) |
-| `/terms-of-use` | Kullanım Koşulları (TR / EN) |
+- Üst menüden **Login** (Firebase Auth e-posta + şifre)
+- Admin dashboard
+- İçerik moderasyonu (`pending` → `approved` / `rejected`)
+- Ajan / Exper / Usta / Servis başvuru yönetimi
+- Kullanıcı CRUD + kullanıcının ilan/içerikleri
+- İlan yönetimi (yayınla / gizle / düzenle / sil)
+- Gizlilik ve kullanım koşulları sayfaları
 
-İçerik, Agenta uygulamasındaki `legal_documents.dart` ile uyumludur.
-
-## Yerel önizleme
+## Kurulum
 
 ```bash
-cd public
-python3 -m http.server 8080
+npm install
+cp .env.example .env.local   # gerekirse düzenleyin
+npm run dev
 ```
 
-Tarayıcı: http://localhost:8080
+Tarayıcı: http://localhost:3000
 
-## Firebase Hosting deploy
+## Admin hesabı
 
-Firebase CLI ile giriş yaptıktan sonra:
+1. Firebase Console → Authentication’da bir kullanıcı oluşturun (veya mevcut hesabı kullanın).
+2. Firestore `users/{uid}` belgesine `isAdmin: true` ekleyin.
+3. Web’de Login ile e-posta + şifre girin.
+
+İsteğe bağlı: `.env.local` içinde `NEXT_PUBLIC_ADMIN_EMAILS=admin@example.com` ile ek e-posta beyaz listesi (yine de Firestore yazmaları için `isAdmin: true` gerekir).
+
+## Firestore kuralları
+
+Admin yazma yetkisi mobil repodaki `firestore.rules` içinde `isAdmin()` ile tanımlıdır. Deploy:
 
 ```bash
+cd ../agenta
+firebase deploy --only firestore:rules
+```
+
+## Deploy (Firebase Hosting + Next.js)
+
+```bash
+firebase experiments:enable webframeworks
 firebase use agenta-c1d6b
-firebase deploy --only hosting
+firebase deploy
 ```
 
-Deploy sonrası örnek URL’ler:
+## Yasal URL’ler
 
-- `https://agenta-c1d6b.web.app/privacy-policy`
-- `https://agenta-c1d6b.web.app/terms-of-use`
-
-## App Store / Play Store
-
-Mağaza formlarına şu URL’leri verebilirsiniz (deploy sonrası kendi domain’iniz varsa onu kullanın):
-
-- Privacy Policy: `https://agenta-c1d6b.web.app/privacy-policy`
-- Terms of Use: `https://agenta-c1d6b.web.app/terms-of-use`
+- `/privacy-policy` → Privacy Policy
+- `/terms-of-use` → Terms of Use
