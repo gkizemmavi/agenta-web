@@ -34,10 +34,18 @@ export default function AdminApplicationsPage() {
   );
 }
 
+const typeLabels: Record<string, string> = {
+  individual: "Ajan",
+  expert: "Exper",
+  master: "Usta",
+  service: "Servis",
+};
+
 function AdminApplicationsInner() {
   const searchParams = useSearchParams();
   const initial =
     (searchParams.get("status") as AgentAppStatus | "all") || "pending";
+  const typeFilter = searchParams.get("type") || "all";
   const [status, setStatus] = useState<AgentAppStatus | "all">(
     ["pending", "approved", "rejected", "all"].includes(initial)
       ? initial
@@ -48,17 +56,28 @@ function AdminApplicationsInner() {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (["pending", "approved", "rejected", "all"].includes(initial)) {
+      setStatus(initial);
+    }
+  }, [initial]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      setItems(await fetchAgentApplications(status));
+      const all = await fetchAgentApplications(status);
+      setItems(
+        typeFilter === "all"
+          ? all
+          : all.filter((app) => app.typeKey === typeFilter),
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Başvurular yüklenemedi");
     } finally {
       setLoading(false);
     }
-  }, [status]);
+  }, [status, typeFilter]);
 
   useEffect(() => {
     void load();
@@ -93,9 +112,15 @@ function AdminApplicationsInner() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight">Başvurular</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight">
+            {typeFilter !== "all" && typeLabels[typeFilter]
+              ? `${typeLabels[typeFilter]} başvuruları`
+              : "Başvurular"}
+          </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Ajan, Exper, Usta ve Servis başvurularını yönetin.
+            {typeFilter !== "all" && typeLabels[typeFilter]
+              ? `${typeLabels[typeFilter]} başvurularını onaylayın veya reddedin.`
+              : "Ajan, Exper, Usta ve Servis başvurularını yönetin."}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

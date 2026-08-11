@@ -2,33 +2,136 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
-  ClipboardList,
-  FileVideo,
   LayoutDashboard,
   LogOut,
-  Store,
-  Users,
+  FileClock,
+  UserRound,
+  Wrench,
+  BadgeCheck,
+  Building2,
+  UsersRound,
   Menu,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import clsx from "clsx";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 
-const nav = [
+type NavItem = {
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  match?: {
+    pathname: string;
+    type?: string;
+    status?: string;
+  };
+};
+
+const nav: NavItem[] = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/admin/contents", label: "İçerikler", icon: FileVideo },
-  { href: "/admin/applications", label: "Başvurular", icon: ClipboardList },
-  { href: "/admin/listings", label: "İlanlar", icon: Store },
-  { href: "/admin/users", label: "Kullanıcılar", icon: Users },
+  {
+    href: "/admin/contents?status=pending",
+    label: "Pending içerikleri incele",
+    icon: FileClock,
+    match: { pathname: "/admin/contents", status: "pending" },
+  },
+  {
+    href: "/admin/applications?status=pending&type=individual",
+    label: "Ajan",
+    icon: UserRound,
+    match: { pathname: "/admin/applications", type: "individual" },
+  },
+  {
+    href: "/admin/applications?status=pending&type=expert",
+    label: "Exper",
+    icon: BadgeCheck,
+    match: { pathname: "/admin/applications", type: "expert" },
+  },
+  {
+    href: "/admin/applications?status=pending&type=master",
+    label: "Usta",
+    icon: Wrench,
+    match: { pathname: "/admin/applications", type: "master" },
+  },
+  {
+    href: "/admin/applications?status=pending&type=service",
+    label: "Servis başvuruları",
+    icon: Building2,
+    match: { pathname: "/admin/applications", type: "service" },
+  },
+  {
+    href: "/admin/users",
+    label: "Kullanıcı ve ilan yönetimi",
+    icon: UsersRound,
+    match: { pathname: "/admin/users" },
+  },
 ];
+
+function isNavActive(
+  item: NavItem,
+  pathname: string,
+  searchParams: URLSearchParams,
+) {
+  if (item.href === "/admin") return pathname === "/admin";
+
+  const match = item.match;
+  if (!match) return pathname.startsWith(item.href);
+
+  if (match.pathname === "/admin/users") {
+    return pathname === "/admin/users" || pathname.startsWith("/admin/users/");
+  }
+
+  if (pathname !== match.pathname) return false;
+
+  if (match.type) {
+    return searchParams.get("type") === match.type;
+  }
+
+  if (match.status) {
+    return (
+      searchParams.get("status") === match.status && !searchParams.get("type")
+    );
+  }
+
+  return true;
+}
+
+function AdminNav({ onNavigate }: { onNavigate?: () => void }) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  return (
+    <nav className="space-y-1 p-3 pb-28">
+      {nav.map((item) => {
+        const active = isNavActive(item, pathname, searchParams);
+        const Icon = item.icon;
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            onClick={onNavigate}
+            className={clsx(
+              "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition",
+              active
+                ? "bg-[var(--brand-soft)] text-[var(--brand)]"
+                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+            )}
+          >
+            <Icon size={18} className="shrink-0" />
+            <span className="leading-snug">{item.label}</span>
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const { user, isAdmin, loading, logout } = useAuth();
-  const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
 
@@ -51,11 +154,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       <div className="flex min-h-screen">
         <aside
           className={clsx(
-            "fixed inset-y-0 left-0 z-40 w-72 border-r border-slate-200 bg-white transition-transform lg:static lg:translate-x-0",
+            "fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r border-slate-200 bg-white transition-transform lg:static lg:translate-x-0",
             open ? "translate-x-0" : "-translate-x-full",
           )}
         >
-          <div className="flex h-16 items-center justify-between gap-2 border-b border-slate-100 px-5">
+          <div className="flex h-16 shrink-0 items-center justify-between gap-2 border-b border-slate-100 px-5">
             <Link href="/admin" className="flex items-center gap-2.5">
               <Image
                 src="/logo.png"
@@ -79,32 +182,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               <X size={18} />
             </button>
           </div>
-          <nav className="space-y-1 p-3">
-            {nav.map((item) => {
-              const active =
-                item.href === "/admin"
-                  ? pathname === "/admin"
-                  : pathname.startsWith(item.href);
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  className={clsx(
-                    "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition",
-                    active
-                      ? "bg-[var(--brand-soft)] text-[var(--brand)]"
-                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
-                  )}
-                >
-                  <Icon size={18} />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-          <div className="absolute bottom-0 left-0 right-0 border-t border-slate-100 p-4">
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <Suspense fallback={<div className="p-4 text-sm text-slate-400">…</div>}>
+              <AdminNav onNavigate={() => setOpen(false)} />
+            </Suspense>
+          </div>
+          <div className="shrink-0 border-t border-slate-100 p-4">
             <div className="mb-3 truncate text-xs text-slate-500">
               {user.email}
             </div>

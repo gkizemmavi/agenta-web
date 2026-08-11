@@ -61,7 +61,7 @@ export default function AdminDashboardPage() {
       <div>
         <h1 className="text-2xl font-extrabold tracking-tight">Dashboard</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Onay bekleyen içerikler ve başvurulara hızlı erişim.
+          Özet istatistikler. Hızlı işlemler sol menüde.
         </p>
       </div>
 
@@ -100,45 +100,15 @@ export default function AdminDashboardPage() {
         })}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="font-bold">Hızlı işlemler</h2>
-          <ul className="mt-4 space-y-2 text-sm">
-            <li>
-              <Link
-                className="font-semibold text-[var(--brand)] hover:underline"
-                href="/admin/contents?status=pending"
-              >
-                Pending içerikleri incele →
-              </Link>
-            </li>
-            <li>
-              <Link
-                className="font-semibold text-[var(--brand)] hover:underline"
-                href="/admin/applications?status=pending"
-              >
-                Ajan / Exper / Usta / Servis başvuruları →
-              </Link>
-            </li>
-            <li>
-              <Link
-                className="font-semibold text-[var(--brand)] hover:underline"
-                href="/admin/users"
-              >
-                Kullanıcı ve ilan yönetimi →
-              </Link>
-            </li>
-          </ul>
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="font-bold">Onaylı içerik</h2>
-          <p className="mt-3 text-3xl font-extrabold">
-            {stats?.contentsApproved ?? "—"}
-          </p>
-          <p className="mt-1 text-sm text-slate-500">
-            Mobil uygulamada yayınlanan içerik sayısı (örneklem limiti içinde).
-          </p>
-        </div>
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="font-bold">Onaylı içerik</h2>
+        <p className="mt-3 text-3xl font-extrabold">
+          {stats?.contentsApproved ?? "—"}
+        </p>
+        <p className="mt-1 text-sm text-slate-500">
+          Mobil uygulamada yayınlanan içerik sayısı (örneklem limiti içinde).
+          Sol menüden hızlı işlemlere geçebilirsiniz.
+        </p>
       </div>
     </div>
   );
