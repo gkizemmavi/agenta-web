@@ -26,7 +26,7 @@ export function SiteHeader() {
               alt="Agenta"
               width={36}
               height={36}
-              className="rounded-[10px] object-cover"
+              className="rounded-[10px] object-cover bg-amber-500"
             />
             <span className="text-lg font-extrabold tracking-wide">Agenta</span>
           </Link>
@@ -69,7 +69,7 @@ export function SiteHeader() {
             ) : (
               <Button onClick={() => setLoginOpen(true)}>
                 <LogIn size={16} />
-                Login
+                Giriş Yap
               </Button>
             )}
           </nav>

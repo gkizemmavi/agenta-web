@@ -15,30 +15,6 @@ export default function HomePage() {
       <div className="relative">
         <SiteHeader />
         <main className="mx-auto max-w-3xl px-4 pb-20 pt-16">
-          <div className="mb-10 flex items-center gap-4">
-            <Image
-              src="/logo.png"
-              alt="Agenta"
-              width={72}
-              height={72}
-              className="rounded-2xl shadow-lg shadow-orange-500/20"
-              priority
-            />
-            <div>
-              <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl">
-                Agenta
-              </h1>
-              <p className="mt-1 text-[var(--site-muted)]">
-                Yönetim paneli ve yasal sayfalar
-              </p>
-            </div>
-          </div>
-
-          <p className="max-w-xl text-lg leading-relaxed text-zinc-300">
-            Üst menüdeki Login ile admin hesabınıza giriş yaparak içerik
-            onayları, başvurular, kullanıcılar ve ilanları yönetebilirsiniz.
-          </p>
-
           <div className="mt-10 grid gap-4 sm:grid-cols-2">
             <Link
               href="/privacy-policy.html"
