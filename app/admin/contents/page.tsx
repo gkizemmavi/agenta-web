@@ -1,20 +1,24 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { format } from "date-fns";
 import { Check, Pencil, Trash2, X } from "lucide-react";
 import {
   deleteContent,
-  fetchContents,
+  fetchContentsPage,
+  PAGE_SIZE,
   setContentStatus,
   updateContent,
+  type PageCursor,
 } from "@/lib/firestore";
+import { useFirestorePagination } from "@/lib/use-firestore-pagination";
 import type { ContentDoc, ModerationStatus } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { ContentMedia } from "@/components/admin/content-media";
+import { PaginationBar } from "@/components/ui/pagination-bar";
 
 const filters: { key: ModerationStatus | "all"; label: string }[] = [
   { key: "pending", label: "Bekleyen" },
@@ -39,46 +43,46 @@ export default function AdminContentsPage() {
 
 function AdminContentsInner() {
   const searchParams = useSearchParams();
-  const initial = (searchParams.get("status") as ModerationStatus | "all") || "pending";
+  const initial =
+    (searchParams.get("status") as ModerationStatus | "all") || "pending";
   const [status, setStatus] = useState<ModerationStatus | "all">(
     ["pending", "approved", "rejected", "all"].includes(initial)
       ? initial
       : "pending",
   );
-  const [items, setItems] = useState<ContentDoc[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [editItem, setEditItem] = useState<ContentDoc | null>(null);
   const [editText, setEditText] = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setItems(await fetchContents({ status, max: 150 }));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "İçerikler yüklenemedi");
-    } finally {
-      setLoading(false);
-    }
-  }, [status]);
-
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (["pending", "approved", "rejected", "all"].includes(initial)) {
+      setStatus(initial);
+    }
+  }, [initial]);
 
-  const counts = useMemo(() => {
-    return {
-      pending: items.filter((i) => i.status === "pending").length,
-    };
-  }, [items]);
+  const fetcher = useCallback(
+    (cursor: PageCursor) =>
+      fetchContentsPage({ status, pageSize: PAGE_SIZE, cursor }),
+    [status],
+  );
+
+  const {
+    items,
+    page,
+    hasMore,
+    loading,
+    error,
+    pageSize,
+    onPrev,
+    onNext,
+    reload,
+  } = useFirestorePagination(fetcher, [status]);
 
   async function moderate(id: string, next: ModerationStatus) {
     setBusyId(id);
     try {
       await setContentStatus(id, next);
-      await load();
+      reload();
     } catch (e) {
       alert(e instanceof Error ? e.message : "İşlem başarısız");
     } finally {
@@ -91,7 +95,7 @@ function AdminContentsInner() {
     setBusyId(id);
     try {
       await deleteContent(id);
-      await load();
+      reload();
     } catch (e) {
       alert(e instanceof Error ? e.message : "Silinemedi");
     } finally {
@@ -105,7 +109,7 @@ function AdminContentsInner() {
     try {
       await updateContent(editItem.id, { description: editText });
       setEditItem(null);
-      await load();
+      reload();
     } catch (e) {
       alert(e instanceof Error ? e.message : "Güncellenemedi");
     } finally {
@@ -119,7 +123,8 @@ function AdminContentsInner() {
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight">İçerikler</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Mobilden paylaşılan içerikleri onaylayın veya reddedin.
+            Mobilden paylaşılan içerikleri onaylayın veya reddedin. Sayfa başı{" "}
+            {pageSize} kayıt.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -153,9 +158,6 @@ function AdminContentsInner() {
       ) : items.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-10 text-center text-slate-500">
           Bu filtrede içerik yok.
-          {status === "pending" && counts.pending === 0
-            ? " Yeni paylaşımlar burada görünecek."
-            : null}
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -232,6 +234,16 @@ function AdminContentsInner() {
           ))}
         </div>
       )}
+
+      <PaginationBar
+        page={page}
+        hasMore={hasMore}
+        loading={loading}
+        onPrev={onPrev}
+        onNext={onNext}
+        pageSize={pageSize}
+        itemCount={items.length}
+      />
 
       <Modal
         open={Boolean(editItem)}

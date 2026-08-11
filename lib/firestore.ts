@@ -3,15 +3,18 @@ import {
   doc,
   getDoc,
   getDocs,
+  getCountFromServer,
   limit,
   orderBy,
   query,
   updateDoc,
   deleteDoc,
   where,
+  startAfter,
   Timestamp,
   type DocumentData,
   type QueryConstraint,
+  type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import { getFirestoreDb } from "./firebase";
 import {
@@ -26,6 +29,16 @@ import {
   type ModerationStatus,
   type UserDoc,
 } from "./types";
+
+export const PAGE_SIZE = 20;
+
+export type PageCursor = QueryDocumentSnapshot<DocumentData> | null;
+
+export type PageResult<T> = {
+  items: T[];
+  lastDoc: PageCursor;
+  hasMore: boolean;
+};
 
 function toDate(value: unknown): Date | null {
   if (!value) return null;
@@ -44,6 +57,20 @@ function asString(value: unknown, fallback = ""): string {
 
 function asNumber(value: unknown, fallback = 0): number {
   return typeof value === "number" ? value : fallback;
+}
+
+function pageSlice<T>(
+  docs: QueryDocumentSnapshot<DocumentData>[],
+  pageSize: number,
+  mapFn: (d: QueryDocumentSnapshot<DocumentData>) => T,
+): PageResult<T> {
+  const hasMore = docs.length > pageSize;
+  const slice = hasMore ? docs.slice(0, pageSize) : docs;
+  return {
+    items: slice.map(mapFn),
+    lastDoc: slice.length ? slice[slice.length - 1] : null,
+    hasMore,
+  };
 }
 
 export function mapUser(id: string, data: DocumentData): UserDoc {
@@ -68,10 +95,35 @@ export function mapUser(id: string, data: DocumentData): UserDoc {
   };
 }
 
-export async function fetchUsers(max = 200): Promise<UserDoc[]> {
-  const q = query(collection(getFirestoreDb(), "users"), orderBy("createdAt", "desc"), limit(max));
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => mapUser(d.id, d.data()));
+export async function fetchUsersPage(opts?: {
+  pageSize?: number;
+  cursor?: PageCursor;
+}): Promise<PageResult<UserDoc>> {
+  const pageSize = opts?.pageSize ?? PAGE_SIZE;
+  const constraints: QueryConstraint[] = [
+    orderBy("createdAt", "desc"),
+    limit(pageSize + 1),
+  ];
+  if (opts?.cursor) constraints.push(startAfter(opts.cursor));
+
+  try {
+    const snap = await getDocs(
+      query(collection(getFirestoreDb(), "users"), ...constraints),
+    );
+    return pageSlice(snap.docs, pageSize, (d) => mapUser(d.id, d.data()));
+  } catch {
+    // Fallback if createdAt index/order missing on some docs
+    const snap = await getDocs(
+      query(collection(getFirestoreDb(), "users"), limit(pageSize + 1)),
+    );
+    return pageSlice(snap.docs, pageSize, (d) => mapUser(d.id, d.data()));
+  }
+}
+
+/** @deprecated use fetchUsersPage */
+export async function fetchUsers(max = PAGE_SIZE): Promise<UserDoc[]> {
+  const page = await fetchUsersPage({ pageSize: max });
+  return page.items;
 }
 
 export async function fetchUser(uid: string): Promise<UserDoc | null> {
@@ -107,12 +159,9 @@ export async function deleteUserDoc(uid: string): Promise<void> {
 }
 
 export function mapContent(id: string, data: DocumentData): ContentDoc {
-  // Legacy docs without status are treated as approved (already live in the app).
   const raw = data.status;
   const status = (
-    typeof raw === "string" && raw
-      ? raw
-      : "approved"
+    typeof raw === "string" && raw ? raw : "approved"
   ) as ModerationStatus;
   return {
     id,
@@ -131,11 +180,13 @@ export function mapContent(id: string, data: DocumentData): ContentDoc {
   };
 }
 
-export async function fetchContents(opts?: {
+export async function fetchContentsPage(opts?: {
   status?: ModerationStatus | "all";
   ownerUid?: string;
-  max?: number;
-}): Promise<ContentDoc[]> {
+  pageSize?: number;
+  cursor?: PageCursor;
+}): Promise<PageResult<ContentDoc>> {
+  const pageSize = opts?.pageSize ?? PAGE_SIZE;
   const constraints: QueryConstraint[] = [];
   if (opts?.status && opts.status !== "all") {
     constraints.push(where("status", "==", opts.status));
@@ -144,25 +195,45 @@ export async function fetchContents(opts?: {
     constraints.push(where("ownerUid", "==", opts.ownerUid));
   }
   constraints.push(orderBy("createdAt", "desc"));
-  constraints.push(limit(opts?.max ?? 100));
+  if (opts?.cursor) constraints.push(startAfter(opts.cursor));
+  constraints.push(limit(pageSize + 1));
 
   try {
-    const snap = await getDocs(query(collection(getFirestoreDb(), "contents"), ...constraints));
-    return snap.docs.map((d) => mapContent(d.id, d.data()));
-  } catch {
-    // Fallback when composite index is missing or legacy docs lack status.
     const snap = await getDocs(
-      query(collection(getFirestoreDb(), "contents"), orderBy("createdAt", "desc"), limit(opts?.max ?? 100)),
+      query(collection(getFirestoreDb(), "contents"), ...constraints),
     );
-    let items = snap.docs.map((d) => mapContent(d.id, d.data()));
+    return pageSlice(snap.docs, pageSize, (d) => mapContent(d.id, d.data()));
+  } catch {
+    // Fallback: no composite index — paginate by createdAt only, filter client-side
+    const fallback: QueryConstraint[] = [orderBy("createdAt", "desc")];
+    if (opts?.cursor) fallback.push(startAfter(opts.cursor));
+    fallback.push(limit(pageSize + 1));
+    const snap = await getDocs(
+      query(collection(getFirestoreDb(), "contents"), ...fallback),
+    );
+    let docs = snap.docs;
     if (opts?.status && opts.status !== "all") {
-      items = items.filter((c) => c.status === opts.status);
+      docs = docs.filter((d) => mapContent(d.id, d.data()).status === opts.status);
     }
     if (opts?.ownerUid) {
-      items = items.filter((c) => c.ownerUid === opts.ownerUid);
+      docs = docs.filter((d) => d.data().ownerUid === opts.ownerUid);
     }
-    return items;
+    return pageSlice(docs, pageSize, (d) => mapContent(d.id, d.data()));
   }
+}
+
+/** @deprecated use fetchContentsPage */
+export async function fetchContents(opts?: {
+  status?: ModerationStatus | "all";
+  ownerUid?: string;
+  max?: number;
+}): Promise<ContentDoc[]> {
+  const page = await fetchContentsPage({
+    status: opts?.status,
+    ownerUid: opts?.ownerUid,
+    pageSize: opts?.max ?? PAGE_SIZE,
+  });
+  return page.items;
 }
 
 export async function setContentStatus(
@@ -228,40 +299,54 @@ export function mapListing(
   };
 }
 
+export async function fetchListingsPage(opts: {
+  collection: ListingCollection;
+  ownerUid?: string;
+  pageSize?: number;
+  cursor?: PageCursor;
+}): Promise<PageResult<ListingDoc>> {
+  const pageSize = opts.pageSize ?? PAGE_SIZE;
+  const key = opts.collection;
+  const constraints: QueryConstraint[] = [];
+  if (opts.ownerUid) constraints.push(where("ownerUid", "==", opts.ownerUid));
+  constraints.push(orderBy("createdAt", "desc"));
+  if (opts.cursor) constraints.push(startAfter(opts.cursor));
+  constraints.push(limit(pageSize + 1));
+
+  try {
+    const snap = await getDocs(
+      query(collection(getFirestoreDb(), key), ...constraints),
+    );
+    return pageSlice(snap.docs, pageSize, (d) => mapListing(d.id, key, d.data()));
+  } catch {
+    const fallback: QueryConstraint[] = [];
+    if (opts.cursor) fallback.push(startAfter(opts.cursor));
+    fallback.push(limit(pageSize + 1));
+    const snap = await getDocs(query(collection(getFirestoreDb(), key), ...fallback));
+    let docs = snap.docs;
+    if (opts.ownerUid) {
+      docs = docs.filter((d) => d.data().ownerUid === opts.ownerUid);
+    }
+    return pageSlice(docs, pageSize, (d) => mapListing(d.id, key, d.data()));
+  }
+}
+
+/** @deprecated use fetchListingsPage */
 export async function fetchListings(opts?: {
   collection?: ListingCollection | "all";
   ownerUid?: string;
   max?: number;
 }): Promise<ListingDoc[]> {
-  const collections =
+  const key =
     opts?.collection && opts.collection !== "all"
-      ? LISTING_COLLECTIONS.filter((c) => c.key === opts.collection)
-      : LISTING_COLLECTIONS;
-
-  const pages = await Promise.all(
-    collections.map(async ({ key }) => {
-      try {
-        const constraints: QueryConstraint[] = [];
-        if (opts?.ownerUid) constraints.push(where("ownerUid", "==", opts.ownerUid));
-        constraints.push(orderBy("createdAt", "desc"));
-        constraints.push(limit(opts?.max ?? 80));
-        const snap = await getDocs(query(collection(getFirestoreDb(), key), ...constraints));
-        return snap.docs.map((d) => mapListing(d.id, key, d.data()));
-      } catch {
-        const snap = await getDocs(query(collection(getFirestoreDb(), key), limit(opts?.max ?? 80)));
-        let items = snap.docs.map((d) => mapListing(d.id, key, d.data()));
-        if (opts?.ownerUid) items = items.filter((l) => l.ownerUid === opts.ownerUid);
-        return items;
-      }
-    }),
-  );
-
-  return pages
-    .flat()
-    .sort(
-      (a, b) =>
-        (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0),
-    );
+      ? opts.collection
+      : "listings";
+  const page = await fetchListingsPage({
+    collection: key,
+    ownerUid: opts?.ownerUid,
+    pageSize: opts?.max ?? PAGE_SIZE,
+  });
+  return page.items;
 }
 
 export async function updateListing(
@@ -282,62 +367,121 @@ export async function deleteListing(
   await deleteDoc(doc(getFirestoreDb(), collectionName, id));
 }
 
-export async function fetchAgentApplications(
-  status: AgentAppStatus | "all" = "all",
-): Promise<AgentApplication[]> {
-  const snap = await getDocs(collection(getFirestoreDb(), "agents"));
-  const apps: AgentApplication[] = [];
+function mapAgentDoc(
+  d: QueryDocumentSnapshot<DocumentData>,
+  profile?: { name: string; email: string; phone: string; avatarUrl: string | null },
+): AgentApplication {
+  const data = d.data();
+  const appStatus = (asString(data.status, "pending") ||
+    "pending") as AgentAppStatus;
+  return {
+    id: d.id,
+    type: asString(data.type),
+    typeKey: normalizeAgentType(asString(data.type)),
+    status: ["pending", "approved", "rejected"].includes(appStatus)
+      ? appStatus
+      : "pending",
+    nationalId: asString(data.nationalId),
+    province: asString(data.province),
+    district: asString(data.district),
+    address: asString(data.address),
+    submittedAt: toDate(data.submittedAt),
+    submittedAtIso: asString(data.submittedAtIso) || undefined,
+    userName: profile?.name || "",
+    userEmail: profile?.email || "",
+    userPhone: profile?.phone || "",
+    avatarUrl: profile?.avatarUrl ?? null,
+  };
+}
 
-  for (const d of snap.docs) {
-    const data = d.data();
-    if (!data.user) continue; // seeded directory agents
-
-    const appStatus = (asString(data.status, "pending") ||
-      "pending") as AgentAppStatus;
-    if (status !== "all" && appStatus !== status) continue;
-
-    let userName = "";
-    let userEmail = "";
-    let userPhone = "";
-    let avatarUrl: string | null = null;
-
-    try {
-      const userSnap = await getDoc(doc(getFirestoreDb(), "users", d.id));
-      if (userSnap.exists()) {
-        const u = userSnap.data();
-        userName = asString(u.fullName) || asString(u.nickname);
-        userEmail = asString(u.email);
-        userPhone = asString(u.phone);
-        avatarUrl = (u.avatarUrl as string | null | undefined) ?? null;
-      }
-    } catch {
-      /* ignore */
+async function enrichAgent(d: QueryDocumentSnapshot<DocumentData>) {
+  let profile = {
+    name: "",
+    email: "",
+    phone: "",
+    avatarUrl: null as string | null,
+  };
+  try {
+    const userSnap = await getDoc(doc(getFirestoreDb(), "users", d.id));
+    if (userSnap.exists()) {
+      const u = userSnap.data();
+      profile = {
+        name: asString(u.fullName) || asString(u.nickname),
+        email: asString(u.email),
+        phone: asString(u.phone),
+        avatarUrl: (u.avatarUrl as string | null | undefined) ?? null,
+      };
     }
+  } catch {
+    /* ignore */
+  }
+  return mapAgentDoc(d, profile);
+}
 
-    apps.push({
-      id: d.id,
-      type: asString(data.type),
-      typeKey: normalizeAgentType(asString(data.type)),
-      status: ["pending", "approved", "rejected"].includes(appStatus)
-        ? appStatus
-        : "pending",
-      nationalId: asString(data.nationalId),
-      province: asString(data.province),
-      district: asString(data.district),
-      address: asString(data.address),
-      submittedAt: toDate(data.submittedAt),
-      submittedAtIso: asString(data.submittedAtIso) || undefined,
-      userName,
-      userEmail,
-      userPhone,
-      avatarUrl,
+export async function fetchAgentApplicationsPage(opts?: {
+  status?: AgentAppStatus | "all";
+  typeKey?: string | "all";
+  pageSize?: number;
+  cursor?: PageCursor;
+}): Promise<PageResult<AgentApplication>> {
+  const pageSize = opts?.pageSize ?? PAGE_SIZE;
+  const status = opts?.status ?? "all";
+  const typeKey = opts?.typeKey ?? "all";
+
+  // Over-fetch a bit when client-side type filter is needed.
+  const fetchLimit = typeKey !== "all" ? pageSize * 3 + 1 : pageSize + 1;
+
+  const constraints: QueryConstraint[] = [];
+  if (status !== "all") {
+    constraints.push(where("status", "==", status));
+  }
+  constraints.push(orderBy("submittedAt", "desc"));
+  if (opts?.cursor) constraints.push(startAfter(opts.cursor));
+  constraints.push(limit(fetchLimit));
+
+  let docs: QueryDocumentSnapshot<DocumentData>[] = [];
+  try {
+    const snap = await getDocs(
+      query(collection(getFirestoreDb(), "agents"), ...constraints),
+    );
+    docs = snap.docs.filter((d) => d.data().user);
+  } catch {
+    const fallback: QueryConstraint[] = [];
+    if (opts?.cursor) fallback.push(startAfter(opts.cursor));
+    fallback.push(limit(fetchLimit));
+    const snap = await getDocs(
+      query(collection(getFirestoreDb(), "agents"), ...fallback),
+    );
+    docs = snap.docs.filter((d) => {
+      if (!d.data().user) return false;
+      if (status === "all") return true;
+      return asString(d.data().status, "pending") === status;
     });
   }
 
-  return apps.sort(
-    (a, b) =>
-      (b.submittedAt?.getTime() ?? 0) - (a.submittedAt?.getTime() ?? 0),
-  );
+  if (typeKey !== "all") {
+    docs = docs.filter(
+      (d) => normalizeAgentType(asString(d.data().type)) === typeKey,
+    );
+  }
+
+  const hasMore = docs.length > pageSize;
+  const slice = hasMore ? docs.slice(0, pageSize) : docs;
+  const items = await Promise.all(slice.map((d) => enrichAgent(d)));
+
+  return {
+    items,
+    lastDoc: slice.length ? slice[slice.length - 1] : null,
+    hasMore,
+  };
+}
+
+/** @deprecated use fetchAgentApplicationsPage */
+export async function fetchAgentApplications(
+  status: AgentAppStatus | "all" = "all",
+): Promise<AgentApplication[]> {
+  const page = await fetchAgentApplicationsPage({ status, pageSize: PAGE_SIZE });
+  return page.items;
 }
 
 export async function setAgentApplicationStatus(
@@ -385,27 +529,37 @@ export async function deleteAgentApplication(id: string): Promise<void> {
 }
 
 export async function fetchDashboardStats() {
-  const [users, contents, agents, listings] = await Promise.all([
-    getDocs(query(collection(getFirestoreDb(), "users"), limit(500))),
-    getDocs(query(collection(getFirestoreDb(), "contents"), limit(500))),
-    getDocs(collection(getFirestoreDb(), "agents")),
-    Promise.all(
-      LISTING_COLLECTIONS.map(({ key }) =>
-        getDocs(query(collection(getFirestoreDb(), key), limit(200))),
-      ),
-    ),
-  ]);
+  async function countCol(
+    col: string,
+    ...constraints: QueryConstraint[]
+  ): Promise<number> {
+    try {
+      const snap = await getCountFromServer(
+        query(collection(getFirestoreDb(), col), ...constraints),
+      );
+      return snap.data().count;
+    } catch {
+      const snap = await getDocs(
+        query(collection(getFirestoreDb(), col), ...constraints, limit(100)),
+      );
+      return snap.size;
+    }
+  }
 
-  const contentDocs = contents.docs.map((d) => mapContent(d.id, d.data()));
-  const agentApps = agents.docs.filter((d) => d.data().user);
+  const [users, contentsPending, contentsApproved, applicationsPending, ...listingCounts] =
+    await Promise.all([
+      countCol("users"),
+      countCol("contents", where("status", "==", "pending")),
+      countCol("contents", where("status", "==", "approved")),
+      countCol("agents", where("status", "==", "pending")),
+      ...LISTING_COLLECTIONS.map(({ key }) => countCol(key)),
+    ]);
 
   return {
-    users: users.size,
-    contentsPending: contentDocs.filter((c) => c.status === "pending").length,
-    contentsApproved: contentDocs.filter((c) => c.status === "approved").length,
-    applicationsPending: agentApps.filter(
-      (d) => asString(d.data().status, "pending") === "pending",
-    ).length,
-    listings: listings.reduce((sum, snap) => sum + snap.size, 0),
+    users,
+    contentsPending,
+    contentsApproved,
+    applicationsPending,
+    listings: listingCounts.reduce((a, b) => a + b, 0),
   };
 }

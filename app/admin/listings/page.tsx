@@ -1,13 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { format } from "date-fns";
 import { Eye, EyeOff, Pencil, Trash2 } from "lucide-react";
 import {
   deleteListing,
-  fetchListings,
+  fetchListingsPage,
+  PAGE_SIZE,
   updateListing,
+  type PageCursor,
 } from "@/lib/firestore";
+import { useFirestorePagination } from "@/lib/use-firestore-pagination";
 import {
   LISTING_COLLECTIONS,
   type ListingCollection,
@@ -16,33 +19,33 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
+import { PaginationBar } from "@/components/ui/pagination-bar";
 
 export default function AdminListingsPage() {
-  const [collection, setCollection] = useState<ListingCollection | "all">("all");
-  const [items, setItems] = useState<ListingDoc[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [collection, setCollection] = useState<ListingCollection>("listings");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [editItem, setEditItem] = useState<ListingDoc | null>(null);
   const [title, setTitle] = useState("");
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setItems(await fetchListings({ collection, max: 100 }));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "İlanlar yüklenemedi");
-    } finally {
-      setLoading(false);
-    }
-  }, [collection]);
+  const fetcher = useCallback(
+    (cursor: PageCursor) =>
+      fetchListingsPage({ collection, pageSize: PAGE_SIZE, cursor }),
+    [collection],
+  );
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const {
+    items,
+    page,
+    hasMore,
+    loading,
+    error,
+    pageSize,
+    onPrev,
+    onNext,
+    reload,
+  } = useFirestorePagination(fetcher, [collection]);
 
   async function togglePublish(item: ListingDoc) {
     setBusyId(item.id);
@@ -50,7 +53,7 @@ export default function AdminListingsPage() {
       await updateListing(item.collection, item.id, {
         isPublished: !item.isPublished,
       });
-      await load();
+      reload();
     } catch (e) {
       alert(e instanceof Error ? e.message : "Güncellenemedi");
     } finally {
@@ -63,7 +66,7 @@ export default function AdminListingsPage() {
     setBusyId(item.id);
     try {
       await deleteListing(item.collection, item.id);
-      await load();
+      reload();
     } catch (e) {
       alert(e instanceof Error ? e.message : "Silinemedi");
     } finally {
@@ -82,7 +85,7 @@ export default function AdminListingsPage() {
       if (price !== "") payload.price = Number(price);
       await updateListing(editItem.collection, editItem.id, payload);
       setEditItem(null);
-      await load();
+      reload();
     } catch (e) {
       alert(e instanceof Error ? e.message : "Güncellenemedi");
     } finally {
@@ -99,17 +102,14 @@ export default function AdminListingsPage() {
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight">İlanlar</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Tüm kategori ilanlarını görüntüleyin, yayınlayın veya silin.
+            Kategori seçerek sayfala. Sayfa başı {pageSize} ilan.
           </p>
         </div>
         <select
           value={collection}
-          onChange={(e) =>
-            setCollection(e.target.value as ListingCollection | "all")
-          }
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold outline-none ring-[var(--brand)] focus:ring-2"
+          onChange={(e) => setCollection(e.target.value as ListingCollection)}
+          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none ring-[var(--brand)] focus:ring-2"
         >
-          <option value="all">Tüm kategoriler</option>
           {LISTING_COLLECTIONS.map((c) => (
             <option key={c.key} value={c.key}>
               {c.label}
@@ -152,7 +152,10 @@ export default function AdminListingsPage() {
                 </tr>
               ) : (
                 items.map((item) => (
-                  <tr key={`${item.collection}-${item.id}`} className="border-t border-slate-100">
+                  <tr
+                    key={`${item.collection}-${item.id}`}
+                    className="border-t border-slate-100"
+                  >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         {item.photoUrls?.[0] ? (
@@ -236,6 +239,16 @@ export default function AdminListingsPage() {
         </div>
       </div>
 
+      <PaginationBar
+        page={page}
+        hasMore={hasMore}
+        loading={loading}
+        onPrev={onPrev}
+        onNext={onNext}
+        pageSize={pageSize}
+        itemCount={items.length}
+      />
+
       <Modal
         open={Boolean(editItem)}
         onClose={() => setEditItem(null)}
@@ -250,7 +263,7 @@ export default function AdminListingsPage() {
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none ring-[var(--brand)] focus:ring-2"
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none ring-[var(--brand)] focus:ring-2"
             />
           </label>
           <label className="block space-y-1.5">
@@ -261,7 +274,7 @@ export default function AdminListingsPage() {
               type="number"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none ring-[var(--brand)] focus:ring-2"
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none ring-[var(--brand)] focus:ring-2"
             />
           </label>
           <label className="block space-y-1.5">
@@ -272,7 +285,7 @@ export default function AdminListingsPage() {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={4}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none ring-[var(--brand)] focus:ring-2"
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none ring-[var(--brand)] focus:ring-2"
             />
           </label>
           <div className="flex justify-end gap-2">

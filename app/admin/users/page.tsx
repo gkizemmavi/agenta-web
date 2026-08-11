@@ -1,45 +1,36 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
 import { Search } from "lucide-react";
-import { fetchUsers } from "@/lib/firestore";
-import type { UserDoc } from "@/lib/types";
+import { fetchUsersPage, PAGE_SIZE, type PageCursor } from "@/lib/firestore";
+import { useFirestorePagination } from "@/lib/use-firestore-pagination";
 import { Badge } from "@/components/ui/badge";
+import { PaginationBar } from "@/components/ui/pagination-bar";
 
 export default function AdminUsersPage() {
-  const [users, setUsers] = useState<UserDoc[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setUsers(await fetchUsers(300));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Kullanıcılar yüklenemedi");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const fetcher = useCallback(
+    (cursor: PageCursor) => fetchUsersPage({ pageSize: PAGE_SIZE, cursor }),
+    [],
+  );
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const { items, page, hasMore, loading, error, pageSize, onPrev, onNext } =
+    useFirestorePagination(fetcher, []);
 
+  // Search only within the current page (server-side search needs indexes).
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
-    if (!term) return users;
-    return users.filter((u) =>
+    if (!term) return items;
+    return items.filter((u) =>
       [u.fullName, u.nickname, u.email, u.phone, u.uid]
         .join(" ")
         .toLowerCase()
         .includes(term),
     );
-  }, [users, q]);
+  }, [items, q]);
 
   return (
     <div className="space-y-6">
@@ -47,7 +38,7 @@ export default function AdminUsersPage() {
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight">Kullanıcılar</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Kullanıcı bilgilerini ve bağlı ilan / içerikleri yönetin.
+            Sayfa başı {pageSize} kullanıcı. Arama mevcut sayfada çalışır.
           </p>
         </div>
         <div className="relative w-full max-w-sm">
@@ -58,8 +49,8 @@ export default function AdminUsersPage() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="İsim, e-posta, telefon ara…"
-            className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-3 text-sm outline-none ring-[var(--brand)] focus:ring-2"
+            placeholder="Bu sayfada ara…"
+            className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-3 text-sm text-slate-900 outline-none ring-[var(--brand)] focus:ring-2"
           />
         </div>
       </div>
@@ -97,7 +88,10 @@ export default function AdminUsersPage() {
                 </tr>
               ) : (
                 filtered.map((user) => (
-                  <tr key={user.id} className="border-t border-slate-100 hover:bg-slate-50/70">
+                  <tr
+                    key={user.id}
+                    className="border-t border-slate-100 hover:bg-slate-50/70"
+                  >
                     <td className="px-4 py-3">
                       <Link
                         href={`/admin/users/${user.id}`}
@@ -154,6 +148,16 @@ export default function AdminUsersPage() {
           </table>
         </div>
       </div>
+
+      <PaginationBar
+        page={page}
+        hasMore={hasMore}
+        loading={loading}
+        onPrev={onPrev}
+        onNext={onNext}
+        pageSize={pageSize}
+        itemCount={items.length}
+      />
     </div>
   );
 }

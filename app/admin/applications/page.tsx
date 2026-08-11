@@ -6,12 +6,19 @@ import { format } from "date-fns";
 import { Check, Trash2, X } from "lucide-react";
 import {
   deleteAgentApplication,
-  fetchAgentApplications,
+  fetchAgentApplicationsPage,
+  PAGE_SIZE,
   setAgentApplicationStatus,
+  type PageCursor,
 } from "@/lib/firestore";
-import { agentTypeLabel, type AgentApplication, type AgentAppStatus } from "@/lib/types";
+import { useFirestorePagination } from "@/lib/use-firestore-pagination";
+import {
+  agentTypeLabel,
+  type AgentAppStatus,
+} from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { PaginationBar } from "@/components/ui/pagination-bar";
 
 const filters: { key: AgentAppStatus | "all"; label: string }[] = [
   { key: "pending", label: "Bekleyen" },
@@ -19,6 +26,13 @@ const filters: { key: AgentAppStatus | "all"; label: string }[] = [
   { key: "rejected", label: "Reddedilen" },
   { key: "all", label: "Tümü" },
 ];
+
+const typeLabels: Record<string, string> = {
+  individual: "Ajan",
+  expert: "Exper",
+  master: "Usta",
+  service: "Servis",
+};
 
 export default function AdminApplicationsPage() {
   return (
@@ -34,13 +48,6 @@ export default function AdminApplicationsPage() {
   );
 }
 
-const typeLabels: Record<string, string> = {
-  individual: "Ajan",
-  expert: "Exper",
-  master: "Usta",
-  service: "Servis",
-};
-
 function AdminApplicationsInner() {
   const searchParams = useSearchParams();
   const initial =
@@ -51,9 +58,6 @@ function AdminApplicationsInner() {
       ? initial
       : "pending",
   );
-  const [items, setItems] = useState<AgentApplication[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -62,32 +66,34 @@ function AdminApplicationsInner() {
     }
   }, [initial]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const all = await fetchAgentApplications(status);
-      setItems(
-        typeFilter === "all"
-          ? all
-          : all.filter((app) => app.typeKey === typeFilter),
-      );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Başvurular yüklenemedi");
-    } finally {
-      setLoading(false);
-    }
-  }, [status, typeFilter]);
+  const fetcher = useCallback(
+    (cursor: PageCursor) =>
+      fetchAgentApplicationsPage({
+        status,
+        typeKey: typeFilter,
+        pageSize: PAGE_SIZE,
+        cursor,
+      }),
+    [status, typeFilter],
+  );
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const {
+    items,
+    page,
+    hasMore,
+    loading,
+    error,
+    pageSize,
+    onPrev,
+    onNext,
+    reload,
+  } = useFirestorePagination(fetcher, [status, typeFilter]);
 
   async function moderate(id: string, next: AgentAppStatus) {
     setBusyId(id);
     try {
       await setAgentApplicationStatus(id, next);
-      await load();
+      reload();
     } catch (e) {
       alert(e instanceof Error ? e.message : "İşlem başarısız");
     } finally {
@@ -100,7 +106,7 @@ function AdminApplicationsInner() {
     setBusyId(id);
     try {
       await deleteAgentApplication(id);
-      await load();
+      reload();
     } catch (e) {
       alert(e instanceof Error ? e.message : "Silinemedi");
     } finally {
@@ -118,9 +124,7 @@ function AdminApplicationsInner() {
               : "Başvurular"}
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            {typeFilter !== "all" && typeLabels[typeFilter]
-              ? `${typeLabels[typeFilter]} başvurularını onaylayın veya reddedin.`
-              : "Ajan, Exper, Usta ve Servis başvurularını yönetin."}
+            Sayfa başı {pageSize} başvuru.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -245,6 +249,16 @@ function AdminApplicationsInner() {
           </table>
         </div>
       </div>
+
+      <PaginationBar
+        page={page}
+        hasMore={hasMore}
+        loading={loading}
+        onPrev={onPrev}
+        onNext={onNext}
+        pageSize={pageSize}
+        itemCount={items.length}
+      />
     </div>
   );
 }

@@ -8,17 +8,21 @@ import {
   deleteContent,
   deleteListing,
   deleteUserDoc,
-  fetchContents,
-  fetchListings,
+  fetchContentsPage,
+  fetchListingsPage,
   fetchUser,
+  PAGE_SIZE,
   updateListing,
   updateUser,
+  type PageCursor,
 } from "@/lib/firestore";
-import type { ContentDoc, ListingDoc, UserDoc } from "@/lib/types";
+import { useFirestorePagination } from "@/lib/use-firestore-pagination";
+import type { ListingCollection, UserDoc } from "@/lib/types";
 import { LISTING_COLLECTIONS } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ContentMedia } from "@/components/admin/content-media";
+import { PaginationBar } from "@/components/ui/pagination-bar";
 
 export default function AdminUserDetailPage() {
   const params = useParams<{ uid: string }>();
@@ -26,8 +30,8 @@ export default function AdminUserDetailPage() {
   const uid = params.uid;
 
   const [user, setUser] = useState<UserDoc | null>(null);
-  const [contents, setContents] = useState<ContentDoc[]>([]);
-  const [listings, setListings] = useState<ListingDoc[]>([]);
+  const [listingCollection, setListingCollection] =
+    useState<ListingCollection>("listings");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,15 +45,39 @@ export default function AdminUserDetailPage() {
   const [isPremium, setIsPremium] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  const load = useCallback(async () => {
+  const contentsFetcher = useCallback(
+    (cursor: PageCursor) =>
+      fetchContentsPage({
+        ownerUid: uid,
+        status: "all",
+        pageSize: PAGE_SIZE,
+        cursor,
+      }),
+    [uid],
+  );
+
+  const listingsFetcher = useCallback(
+    (cursor: PageCursor) =>
+      fetchListingsPage({
+        collection: listingCollection,
+        ownerUid: uid,
+        pageSize: PAGE_SIZE,
+        cursor,
+      }),
+    [uid, listingCollection],
+  );
+
+  const contentsPage = useFirestorePagination(contentsFetcher, [uid]);
+  const listingsPage = useFirestorePagination(listingsFetcher, [
+    uid,
+    listingCollection,
+  ]);
+
+  const loadUser = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [u, c, l] = await Promise.all([
-        fetchUser(uid),
-        fetchContents({ ownerUid: uid, status: "all", max: 100 }),
-        fetchListings({ ownerUid: uid, max: 100 }),
-      ]);
+      const u = await fetchUser(uid);
       if (!u) {
         setError("Kullanıcı bulunamadı");
         setUser(null);
@@ -64,8 +92,6 @@ export default function AdminUserDetailPage() {
       setCredits(String(u.credits));
       setIsPremium(u.isPremium);
       setIsAdmin(Boolean(u.isAdmin));
-      setContents(c);
-      setListings(l);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Yüklenemedi");
     } finally {
@@ -74,8 +100,8 @@ export default function AdminUserDetailPage() {
   }, [uid]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void loadUser();
+  }, [loadUser]);
 
   async function save() {
     setSaving(true);
@@ -90,7 +116,7 @@ export default function AdminUserDetailPage() {
         isPremium,
         isAdmin,
       });
-      await load();
+      await loadUser();
     } catch (e) {
       alert(e instanceof Error ? e.message : "Kaydedilemedi");
     } finally {
@@ -251,14 +277,21 @@ export default function AdminUserDetailPage() {
       </div>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-bold">İçerikler ({contents.length})</h2>
-        {contents.length === 0 ? (
+        <h2 className="text-lg font-bold">
+          İçerikler
+          {contentsPage.loading ? "" : ` (${contentsPage.items.length})`}
+        </h2>
+        {contentsPage.loading ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
+            Yükleniyor…
+          </div>
+        ) : contentsPage.items.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-sm text-slate-500">
             İçerik yok.
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {contents.map((c) => (
+            {contentsPage.items.map((c) => (
               <div
                 key={c.id}
                 className="overflow-hidden rounded-2xl border border-slate-200 bg-white"
@@ -278,7 +311,7 @@ export default function AdminUserDetailPage() {
                     onClick={async () => {
                       if (!confirm("İçerik silinsin mi?")) return;
                       await deleteContent(c.id);
-                      await load();
+                      contentsPage.reload();
                     }}
                   >
                     <Trash2 size={16} /> Sil
@@ -288,11 +321,42 @@ export default function AdminUserDetailPage() {
             ))}
           </div>
         )}
+        <PaginationBar
+          page={contentsPage.page}
+          hasMore={contentsPage.hasMore}
+          loading={contentsPage.loading}
+          onPrev={contentsPage.onPrev}
+          onNext={contentsPage.onNext}
+          pageSize={contentsPage.pageSize}
+          itemCount={contentsPage.items.length}
+        />
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-bold">İlanlar ({listings.length})</h2>
-        {listings.length === 0 ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-bold">
+            İlanlar
+            {listingsPage.loading ? "" : ` (${listingsPage.items.length})`}
+          </h2>
+          <select
+            value={listingCollection}
+            onChange={(e) =>
+              setListingCollection(e.target.value as ListingCollection)
+            }
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none ring-[var(--brand)] focus:ring-2"
+          >
+            {LISTING_COLLECTIONS.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        {listingsPage.loading ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
+            Yükleniyor…
+          </div>
+        ) : listingsPage.items.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-sm text-slate-500">
             İlan yok.
           </div>
@@ -308,7 +372,7 @@ export default function AdminUserDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {listings.map((l) => (
+                {listingsPage.items.map((l) => (
                   <tr key={`${l.collection}-${l.id}`} className="border-t">
                     <td className="px-4 py-3 font-medium">{l.title}</td>
                     <td className="px-4 py-3">
@@ -328,7 +392,7 @@ export default function AdminUserDetailPage() {
                             await updateListing(l.collection, l.id, {
                               isPublished: !l.isPublished,
                             });
-                            await load();
+                            listingsPage.reload();
                           }}
                         >
                           {l.isPublished ? "Gizle" : "Yayınla"}
@@ -338,7 +402,7 @@ export default function AdminUserDetailPage() {
                           onClick={async () => {
                             if (!confirm("İlan silinsin mi?")) return;
                             await deleteListing(l.collection, l.id);
-                            await load();
+                            listingsPage.reload();
                           }}
                         >
                           <Trash2 size={16} />
@@ -351,6 +415,15 @@ export default function AdminUserDetailPage() {
             </table>
           </div>
         )}
+        <PaginationBar
+          page={listingsPage.page}
+          hasMore={listingsPage.hasMore}
+          loading={listingsPage.loading}
+          onPrev={listingsPage.onPrev}
+          onNext={listingsPage.onNext}
+          pageSize={listingsPage.pageSize}
+          itemCount={listingsPage.items.length}
+        />
       </section>
     </div>
   );
