@@ -55,7 +55,7 @@ export function LoginModal({
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-3 text-sm outline-none ring-[var(--brand)] focus:bg-white focus:ring-2"
+              className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-3 text-sm font-medium text-slate-900 caret-slate-900 outline-none ring-[var(--brand)] placeholder:text-slate-400 focus:bg-white focus:ring-2"
               placeholder="admin@agenta.app"
               autoComplete="username"
             />
@@ -75,7 +75,7 @@ export function LoginModal({
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-3 text-sm outline-none ring-[var(--brand)] focus:bg-white focus:ring-2"
+              className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-3 text-sm font-medium text-slate-900 caret-slate-900 outline-none ring-[var(--brand)] placeholder:text-slate-400 focus:bg-white focus:ring-2"
               placeholder="••••••••"
               autoComplete="current-password"
             />

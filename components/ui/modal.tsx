@@ -37,17 +37,22 @@ export function Modal({
         onClick={onClose}
       />
       <div
-        className={`relative z-10 max-h-[90vh] w-full overflow-auto rounded-2xl bg-white shadow-2xl ring-1 ring-black/5 ${
+        className={`relative z-10 max-h-[90vh] w-full overflow-auto rounded-2xl bg-white text-slate-900 shadow-2xl ring-1 ring-black/5 ${
           wide ? "max-w-3xl" : "max-w-md"
         }`}
       >
         <div className="sticky top-0 flex items-center justify-between border-b border-slate-100 bg-white/95 px-5 py-4 backdrop-blur">
           <h2 className="text-lg font-bold text-slate-900">{title}</h2>
-          <Button variant="ghost" className="!p-2" onClick={onClose} type="button">
+          <Button
+            variant="ghost"
+            className="!p-2 !text-slate-600"
+            onClick={onClose}
+            type="button"
+          >
             <X size={18} />
           </Button>
         </div>
-        <div className="px-5 py-4">{children}</div>
+        <div className="px-5 py-4 text-slate-900">{children}</div>
       </div>
     </div>
   );
