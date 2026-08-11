@@ -64,6 +64,15 @@ export interface ListingDoc {
   raw: Record<string, unknown>;
 }
 
+export interface AgentApplicationDocument {
+  key: string;
+  title: string;
+  category: string;
+  url: string;
+  path?: string;
+  contentType?: string;
+}
+
 export interface AgentApplication {
   id: string;
   type: string;
@@ -79,6 +88,7 @@ export interface AgentApplication {
   userEmail?: string;
   userPhone?: string;
   avatarUrl?: string | null;
+  documents: AgentApplicationDocument[];
 }
 
 export const LISTING_COLLECTIONS: {

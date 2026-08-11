@@ -22,6 +22,7 @@ import {
   LISTING_COLLECTIONS,
   normalizeAgentType,
   type AgentApplication,
+  type AgentApplicationDocument,
   type AgentAppStatus,
   type ContentDoc,
   type ListingCollection,
@@ -373,6 +374,41 @@ export async function deleteListing(
   await deleteDoc(doc(getFirestoreDb(), collectionName, id));
 }
 
+function mapAgentDocuments(raw: unknown): AgentApplicationDocument[] {
+  if (!Array.isArray(raw)) return [];
+  const docs: AgentApplicationDocument[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const d = item as Record<string, unknown>;
+    const url = asString(d.url);
+    if (!url) continue;
+    docs.push({
+      key: asString(d.key),
+      title: asString(d.title) || asString(d.key) || "Belge",
+      category: asString(d.category),
+      url,
+      path: asString(d.path) || undefined,
+      contentType: asString(d.contentType) || undefined,
+    });
+  }
+  return docs;
+}
+
+function ownerUidFromAgentDoc(
+  d: QueryDocumentSnapshot<DocumentData>,
+): string {
+  const data = d.data();
+  const owner = asString(data.ownerUid);
+  if (owner) return owner;
+  const user = data.user;
+  if (user && typeof user === "object" && "id" in user) {
+    return String((user as { id: string }).id);
+  }
+  // Legacy applications used agents/{uid} as the doc id.
+  if (!d.id.includes("_")) return d.id;
+  return d.id.split("_")[0] ?? d.id;
+}
+
 function mapAgentDoc(
   d: QueryDocumentSnapshot<DocumentData>,
   profile?: { name: string; email: string; phone: string; avatarUrl: string | null },
@@ -397,6 +433,7 @@ function mapAgentDoc(
     userEmail: profile?.email || "",
     userPhone: profile?.phone || "",
     avatarUrl: profile?.avatarUrl ?? null,
+    documents: mapAgentDocuments(data.documents),
   };
 }
 
@@ -407,16 +444,19 @@ async function enrichAgent(d: QueryDocumentSnapshot<DocumentData>) {
     phone: "",
     avatarUrl: null as string | null,
   };
+  const ownerUid = ownerUidFromAgentDoc(d);
   try {
-    const userSnap = await getDoc(doc(getFirestoreDb(), "users", d.id));
-    if (userSnap.exists()) {
-      const u = userSnap.data();
-      profile = {
-        name: asString(u.fullName) || asString(u.nickname),
-        email: asString(u.email),
-        phone: asString(u.phone),
-        avatarUrl: (u.avatarUrl as string | null | undefined) ?? null,
-      };
+    if (ownerUid) {
+      const userSnap = await getDoc(doc(getFirestoreDb(), "users", ownerUid));
+      if (userSnap.exists()) {
+        const u = userSnap.data();
+        profile = {
+          name: asString(u.fullName) || asString(u.nickname),
+          email: asString(u.email),
+          phone: asString(u.phone),
+          avatarUrl: (u.avatarUrl as string | null | undefined) ?? null,
+        };
+      }
     }
   } catch {
     /* ignore */
@@ -514,16 +554,24 @@ export async function setAgentApplicationStatus(
   }
 
   if (status === "approved") {
-    const userSnap = await getDoc(doc(getFirestoreDb(), "users", id));
-    if (userSnap.exists()) {
-      const u = userSnap.data();
-      payload.name =
-        asString(data.name) ||
-        asString(u.fullName) ||
-        asString(u.nickname) ||
-        "Ajan";
-      if (!data.rating) payload.rating = 0;
-      if (!data.reviewCount) payload.reviewCount = 0;
+    const ownerUid =
+      asString(data.ownerUid) ||
+      (data.user && typeof data.user === "object" && "id" in data.user
+        ? String((data.user as { id: string }).id)
+        : "") ||
+      (!id.includes("_") ? id : id.split("_")[0] ?? "");
+    if (ownerUid) {
+      const userSnap = await getDoc(doc(getFirestoreDb(), "users", ownerUid));
+      if (userSnap.exists()) {
+        const u = userSnap.data();
+        payload.name =
+          asString(data.name) ||
+          asString(u.fullName) ||
+          asString(u.nickname) ||
+          "Ajan";
+        if (!data.rating) payload.rating = 0;
+        if (!data.reviewCount) payload.reviewCount = 0;
+      }
     }
   }
 

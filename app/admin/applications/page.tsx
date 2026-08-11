@@ -19,6 +19,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PaginationBar } from "@/components/ui/pagination-bar";
+import { AgentApplicationDocuments } from "@/components/admin/agent-application-documents";
 
 const filters: { key: AgentAppStatus | "all"; label: string }[] = [
   { key: "pending", label: "Bekleyen" },
@@ -159,6 +160,7 @@ function AdminApplicationsInner() {
                 <th className="px-4 py-3 font-semibold">Kullanıcı</th>
                 <th className="px-4 py-3 font-semibold">Tür</th>
                 <th className="px-4 py-3 font-semibold">Konum</th>
+                <th className="px-4 py-3 font-semibold">Belgeler</th>
                 <th className="px-4 py-3 font-semibold">Durum</th>
                 <th className="px-4 py-3 font-semibold">Tarih</th>
                 <th className="px-4 py-3 font-semibold">İşlem</th>
@@ -167,13 +169,13 @@ function AdminApplicationsInner() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-slate-500">
+                  <td colSpan={7} className="px-4 py-10 text-center text-slate-500">
                     Yükleniyor…
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-slate-500">
+                  <td colSpan={7} className="px-4 py-10 text-center text-slate-500">
                     Başvuru bulunamadı.
                   </td>
                 </tr>
@@ -204,6 +206,9 @@ function AdminApplicationsInner() {
                       <div className="mt-1 max-w-[220px] text-xs text-slate-500">
                         {app.address}
                       </div>
+                    </td>
+                    <td className="px-4 py-4 min-w-[200px]">
+                      <AgentApplicationDocuments documents={app.documents} />
                     </td>
                     <td className="px-4 py-4">
                       <Badge tone={app.status}>{app.status}</Badge>
