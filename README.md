@@ -39,13 +39,45 @@ cd ../agenta
 firebase deploy --only firestore:rules
 ```
 
-## Deploy (Firebase Hosting + Next.js)
+## Cloudflare deploy
+
+Build komutu (Workers / Pages):
 
 ```bash
-firebase experiments:enable webframeworks
-firebase use agenta-c1d6b
-firebase deploy
+npm run deploy
 ```
+
+veya CI’da:
+
+```bash
+npx wrangler deploy
+```
+
+(`wrangler.jsonc` + OpenNext repo’da hazır; tekrar interactive migrate çalışmamalı.)
+
+### Firebase API key / Variables
+
+Dashboard’da **“Variables cannot be added to a Worker that only has static assets”** görürseniz normal: ilk başarısız deploy Worker’ı sadece static assets olarak bırakmış olabilir. Firebase key’leri için dashboard’a bir şey eklemenize **gerek yok**:
+
+- Key’ler `lib/firebase.ts` içinde fallback
+- Aynı key’ler `wrangler.jsonc` → `vars` içinde (deploy ile gelir)
+
+**Cloudflare Deploy / Build komutu şunu olmalı:**
+
+```bash
+npm run deploy
+```
+
+(`npx wrangler deploy` tek başına yetmez; önce OpenNext build gerekir.)
+
+Bu deploy sonrası Worker artık gerçek script + assets olur; isterseniz o zaman dashboard’dan da variable ekleyebilirsiniz.
+
+### Firebase Auth domain
+
+Canlı site domain’inizi Firebase’e ekleyin:
+
+1. Firebase Console → **Authentication** → **Settings** → **Authorized domains**
+2. Cloudflare worker URL’nizi ekleyin (örn. `agenta-web.<account>.workers.dev` veya custom domain)
 
 ## Yasal URL’ler
 
