@@ -34,6 +34,13 @@ export default function AdminDashboardPage() {
       tone: "text-amber-600 bg-amber-50",
     },
     {
+      label: "Bekleyen ilan",
+      value: stats?.listingsPending ?? "—",
+      href: "/admin/listings?status=pending",
+      icon: Store,
+      tone: "text-orange-600 bg-orange-50",
+    },
+    {
       label: "Bekleyen başvuru",
       value: stats?.applicationsPending ?? "—",
       href: "/admin/applications?status=pending",
@@ -46,13 +53,6 @@ export default function AdminDashboardPage() {
       href: "/admin/users",
       icon: Users,
       tone: "text-violet-600 bg-violet-50",
-    },
-    {
-      label: "İlanlar",
-      value: stats?.listings ?? "—",
-      href: "/admin/listings",
-      icon: Store,
-      tone: "text-emerald-600 bg-emerald-50",
     },
   ];
 

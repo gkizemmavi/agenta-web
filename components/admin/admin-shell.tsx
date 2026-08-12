@@ -13,6 +13,7 @@ import {
   BadgeCheck,
   Building2,
   UsersRound,
+  Store,
   Menu,
   X,
 } from "lucide-react";
@@ -69,6 +70,12 @@ const nav: NavItem[] = [
     label: "Servis başvuruları",
     icon: Building2,
     match: { pathname: "/admin/applications", type: "service" },
+  },
+  {
+    href: "/admin/listings?status=pending",
+    label: "Bekleyen ilanlar",
+    icon: Store,
+    match: { pathname: "/admin/listings", status: "pending" },
   },
   {
     href: "/admin/users",

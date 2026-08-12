@@ -297,7 +297,8 @@ export function mapListing(
     location: asString(data.location) || asString(data.province) || undefined,
     ownerUid: asString(data.ownerUid),
     isPublished: data.isPublished !== false,
-    status,
+    // Legacy listings without status are treated as approved when published.
+    status: status ?? (data.isPublished === false ? "pending" : "approved"),
     photoUrls: Array.isArray(photos) ? photos.filter(Boolean) : [],
     description: asString(data.description) || asString(data.details) || undefined,
     phone: asString(data.phone) || undefined,
@@ -306,14 +307,94 @@ export function mapListing(
   };
 }
 
+function listingMatchesStatus(
+  item: ListingDoc,
+  status: ModerationStatus | "all",
+): boolean {
+  if (status === "all") return true;
+  return item.status === status;
+}
+
+async function loadRecentListings(
+  key: ListingCollection,
+  limitN: number,
+  ownerUid?: string,
+): Promise<ListingDoc[]> {
+  try {
+    const constraints: QueryConstraint[] = [];
+    if (ownerUid) constraints.push(where("ownerUid", "==", ownerUid));
+    constraints.push(orderBy("createdAt", "desc"), limit(limitN));
+    const snap = await getDocs(
+      query(collection(getFirestoreDb(), key), ...constraints),
+    );
+    return snap.docs.map((d) => mapListing(d.id, key, d.data()));
+  } catch {
+    try {
+      const snap = await getDocs(
+        query(collection(getFirestoreDb(), key), limit(limitN)),
+      );
+      let rows = snap.docs.map((d) => mapListing(d.id, key, d.data()));
+      if (ownerUid) rows = rows.filter((r) => r.ownerUid === ownerUid);
+      rows.sort(
+        (a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0),
+      );
+      return rows;
+    } catch {
+      return [];
+    }
+  }
+}
+
 export async function fetchListingsPage(opts: {
-  collection: ListingCollection;
+  collection: ListingCollection | "all";
+  status?: ModerationStatus | "all";
   ownerUid?: string;
   pageSize?: number;
   cursor?: PageCursor;
 }): Promise<PageResult<ListingDoc>> {
   const pageSize = opts.pageSize ?? PAGE_SIZE;
-  const key = opts.collection;
+  const status = opts.status ?? "all";
+  const collections: ListingCollection[] =
+    opts.collection === "all"
+      ? LISTING_COLLECTIONS.map((c) => c.key)
+      : [opts.collection];
+
+  // Status / multi-collection: merge then page by document id offset.
+  if (collections.length > 1 || status !== "all") {
+    const rows = (
+      await Promise.all(
+        collections.map((key) =>
+          loadRecentListings(key, Math.max(80, pageSize * 3), opts.ownerUid),
+        ),
+      )
+    )
+      .flat()
+      .filter((r) => listingMatchesStatus(r, status));
+    rows.sort(
+      (a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0),
+    );
+
+    let start = 0;
+    if (opts.cursor) {
+      const cursorId = (opts.cursor as { id?: string }).id;
+      if (cursorId) {
+        const idx = rows.findIndex((r) => r.id === cursorId);
+        start = idx >= 0 ? idx + 1 : 0;
+      }
+    }
+    const window = rows.slice(start, start + pageSize + 1);
+    const hasMore = window.length > pageSize;
+    const items = hasMore ? window.slice(0, pageSize) : window;
+    return {
+      items,
+      lastDoc: items.length
+        ? ({ id: items[items.length - 1].id } as unknown as PageCursor)
+        : null,
+      hasMore,
+    };
+  }
+
+  const key = collections[0];
   const constraints: QueryConstraint[] = [];
   if (opts.ownerUid) constraints.push(where("ownerUid", "==", opts.ownerUid));
   constraints.push(orderBy("createdAt", "desc"));
@@ -324,18 +405,34 @@ export async function fetchListingsPage(opts: {
     const snap = await getDocs(
       query(collection(getFirestoreDb(), key), ...constraints),
     );
-    return pageSlice(snap.docs, pageSize, (d) => mapListing(d.id, key, d.data()));
+    return pageSlice(snap.docs, pageSize, (d) =>
+      mapListing(d.id, key, d.data()),
+    );
   } catch {
     const fallback: QueryConstraint[] = [];
     if (opts.cursor) fallback.push(startAfter(opts.cursor));
     fallback.push(limit(pageSize + 1));
-    const snap = await getDocs(query(collection(getFirestoreDb(), key), ...fallback));
+    const snap = await getDocs(
+      query(collection(getFirestoreDb(), key), ...fallback),
+    );
     let docs = snap.docs;
     if (opts.ownerUid) {
       docs = docs.filter((d) => d.data().ownerUid === opts.ownerUid);
     }
     return pageSlice(docs, pageSize, (d) => mapListing(d.id, key, d.data()));
   }
+}
+
+export async function setListingStatus(
+  collectionName: ListingCollection,
+  id: string,
+  status: ModerationStatus,
+): Promise<void> {
+  await updateDoc(doc(getFirestoreDb(), collectionName, id), {
+    status,
+    isPublished: status === "approved",
+    updatedAt: Timestamp.now(),
+  });
 }
 
 /** @deprecated use fetchListingsPage */
@@ -600,20 +697,32 @@ export async function fetchDashboardStats() {
     }
   }
 
-  const [users, contentsPending, contentsApproved, applicationsPending, ...listingCounts] =
-    await Promise.all([
-      countCol("users"),
-      countCol("contents", where("status", "==", "pending")),
-      countCol("contents", where("status", "==", "approved")),
-      countCol("agents", where("status", "==", "pending")),
-      ...LISTING_COLLECTIONS.map(({ key }) => countCol(key)),
-    ]);
+  const [
+    users,
+    contentsPending,
+    contentsApproved,
+    applicationsPending,
+    ...listingPendingCounts
+  ] = await Promise.all([
+    countCol("users"),
+    countCol("contents", where("status", "==", "pending")),
+    countCol("contents", where("status", "==", "approved")),
+    countCol("agents", where("status", "==", "pending")),
+    ...LISTING_COLLECTIONS.map(({ key }) =>
+      countCol(key, where("status", "==", "pending")),
+    ),
+  ]);
+
+  const listingCounts = await Promise.all(
+    LISTING_COLLECTIONS.map(({ key }) => countCol(key)),
+  );
 
   return {
     users,
     contentsPending,
     contentsApproved,
     applicationsPending,
+    listingsPending: listingPendingCounts.reduce((a, b) => a + b, 0),
     listings: listingCounts.reduce((a, b) => a + b, 0),
   };
 }

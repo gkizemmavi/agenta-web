@@ -1,12 +1,14 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { format } from "date-fns";
-import { Eye, EyeOff, Pencil, Trash2 } from "lucide-react";
+import { Check, Eye, EyeOff, Pencil, Trash2, X } from "lucide-react";
 import {
   deleteListing,
   fetchListingsPage,
   PAGE_SIZE,
+  setListingStatus,
   updateListing,
   type PageCursor,
 } from "@/lib/firestore";
@@ -15,24 +17,73 @@ import {
   LISTING_COLLECTIONS,
   type ListingCollection,
   type ListingDoc,
+  type ModerationStatus,
 } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { PaginationBar } from "@/components/ui/pagination-bar";
 
+const statusFilters: { key: ModerationStatus | "all"; label: string }[] = [
+  { key: "pending", label: "Bekleyen" },
+  { key: "approved", label: "Onaylı" },
+  { key: "rejected", label: "Reddedilen" },
+  { key: "all", label: "Tümü" },
+];
+
 export default function AdminListingsPage() {
-  const [collection, setCollection] = useState<ListingCollection>("listings");
+  return (
+    <Suspense
+      fallback={
+        <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-slate-500">
+          Yükleniyor…
+        </div>
+      }
+    >
+      <AdminListingsInner />
+    </Suspense>
+  );
+}
+
+function AdminListingsInner() {
+  const searchParams = useSearchParams();
+  const initialStatus =
+    (searchParams.get("status") as ModerationStatus | "all") || "pending";
+  const initialCollection =
+    (searchParams.get("collection") as ListingCollection | "all") || "all";
+
+  const [status, setStatus] = useState<ModerationStatus | "all">(
+    ["pending", "approved", "rejected", "all"].includes(initialStatus)
+      ? initialStatus
+      : "pending",
+  );
+  const [collection, setCollection] = useState<ListingCollection | "all">(
+    initialCollection === "all" ||
+      LISTING_COLLECTIONS.some((c) => c.key === initialCollection)
+      ? initialCollection
+      : "all",
+  );
   const [busyId, setBusyId] = useState<string | null>(null);
   const [editItem, setEditItem] = useState<ListingDoc | null>(null);
   const [title, setTitle] = useState("");
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
 
+  useEffect(() => {
+    if (["pending", "approved", "rejected", "all"].includes(initialStatus)) {
+      setStatus(initialStatus);
+    }
+  }, [initialStatus]);
+
   const fetcher = useCallback(
     (cursor: PageCursor) =>
-      fetchListingsPage({ collection, pageSize: PAGE_SIZE, cursor }),
-    [collection],
+      fetchListingsPage({
+        collection,
+        status,
+        pageSize: PAGE_SIZE,
+        cursor,
+      }),
+    [collection, status],
   );
 
   const {
@@ -45,13 +96,26 @@ export default function AdminListingsPage() {
     onPrev,
     onNext,
     reload,
-  } = useFirestorePagination(fetcher, [collection]);
+  } = useFirestorePagination(fetcher, [collection, status]);
+
+  async function moderate(item: ListingDoc, next: ModerationStatus) {
+    setBusyId(item.id);
+    try {
+      await setListingStatus(item.collection, item.id, next);
+      reload();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "İşlem başarısız");
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   async function togglePublish(item: ListingDoc) {
     setBusyId(item.id);
     try {
       await updateListing(item.collection, item.id, {
         isPublished: !item.isPublished,
+        status: !item.isPublished ? "approved" : item.status,
       });
       reload();
     } catch (e) {
@@ -102,20 +166,40 @@ export default function AdminListingsPage() {
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight">İlanlar</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Kategori seçerek sayfala. Sayfa başı {pageSize} ilan.
+            Paylaşılan ilanlar onay bekler. Onaylayınca mobilde yayınlanır.
+            Sayfa başı {pageSize} kayıt.
           </p>
         </div>
-        <select
-          value={collection}
-          onChange={(e) => setCollection(e.target.value as ListingCollection)}
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none ring-[var(--brand)] focus:ring-2"
-        >
-          {LISTING_COLLECTIONS.map((c) => (
-            <option key={c.key} value={c.key}>
-              {c.label}
-            </option>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={collection}
+            onChange={(e) =>
+              setCollection(e.target.value as ListingCollection | "all")
+            }
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none ring-[var(--brand)] focus:ring-2"
+          >
+            <option value="all">Tüm kategoriler</option>
+            {LISTING_COLLECTIONS.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+          {statusFilters.map((f) => (
+            <button
+              key={f.key}
+              type="button"
+              onClick={() => setStatus(f.key)}
+              className={`rounded-full px-3.5 py-1.5 text-sm font-semibold transition ${
+                status === f.key
+                  ? "bg-[var(--brand)] text-white"
+                  : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              {f.label}
+            </button>
           ))}
-        </select>
+        </div>
       </div>
 
       {error ? (
@@ -132,7 +216,7 @@ export default function AdminListingsPage() {
                 <th className="px-4 py-3 font-semibold">İlan</th>
                 <th className="px-4 py-3 font-semibold">Kategori</th>
                 <th className="px-4 py-3 font-semibold">Fiyat</th>
-                <th className="px-4 py-3 font-semibold">Yayın</th>
+                <th className="px-4 py-3 font-semibold">Durum</th>
                 <th className="px-4 py-3 font-semibold">Tarih</th>
                 <th className="px-4 py-3 font-semibold">İşlem</th>
               </tr>
@@ -140,13 +224,19 @@ export default function AdminListingsPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-slate-500">
+                  <td
+                    colSpan={6}
+                    className="px-4 py-10 text-center text-slate-500"
+                  >
                     Yükleniyor…
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-slate-500">
+                  <td
+                    colSpan={6}
+                    className="px-4 py-10 text-center text-slate-500"
+                  >
                     İlan bulunamadı.
                   </td>
                 </tr>
@@ -187,9 +277,14 @@ export default function AdminListingsPage() {
                         : "—"}
                     </td>
                     <td className="px-4 py-3">
-                      <Badge tone={item.isPublished ? "success" : "warn"}>
-                        {item.isPublished ? "Yayında" : "Gizli"}
-                      </Badge>
+                      <div className="flex flex-wrap gap-1">
+                        <Badge tone={item.status ?? "pending"}>
+                          {item.status ?? "pending"}
+                        </Badge>
+                        <Badge tone={item.isPublished ? "success" : "warn"}>
+                          {item.isPublished ? "Yayında" : "Gizli"}
+                        </Badge>
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-slate-500">
                       {item.createdAt
@@ -197,7 +292,25 @@ export default function AdminListingsPage() {
                         : "—"}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap gap-1">
+                        {item.status !== "approved" ? (
+                          <Button
+                            variant="success"
+                            disabled={busyId === item.id}
+                            onClick={() => moderate(item, "approved")}
+                          >
+                            <Check size={16} /> Onayla
+                          </Button>
+                        ) : null}
+                        {item.status !== "rejected" ? (
+                          <Button
+                            variant="danger"
+                            disabled={busyId === item.id}
+                            onClick={() => moderate(item, "rejected")}
+                          >
+                            <X size={16} /> Reddet
+                          </Button>
+                        ) : null}
                         <Button
                           variant="secondary"
                           disabled={busyId === item.id}
@@ -252,40 +365,35 @@ export default function AdminListingsPage() {
       <Modal
         open={Boolean(editItem)}
         onClose={() => setEditItem(null)}
-        title="İlan düzenle"
-        wide
+        title="İlanı düzenle"
       >
-        <div className="space-y-4">
-          <label className="block space-y-1.5">
-            <span className="text-xs font-semibold uppercase text-slate-500">
-              Başlık
-            </span>
+        <div className="space-y-3">
+          <label className="block space-y-1">
+            <span className="text-xs font-semibold text-slate-500">Başlık</span>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none ring-[var(--brand)] focus:ring-2"
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
             />
           </label>
-          <label className="block space-y-1.5">
-            <span className="text-xs font-semibold uppercase text-slate-500">
-              Fiyat
-            </span>
+          <label className="block space-y-1">
+            <span className="text-xs font-semibold text-slate-500">Fiyat</span>
             <input
-              type="number"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none ring-[var(--brand)] focus:ring-2"
+              type="number"
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
             />
           </label>
-          <label className="block space-y-1.5">
-            <span className="text-xs font-semibold uppercase text-slate-500">
+          <label className="block space-y-1">
+            <span className="text-xs font-semibold text-slate-500">
               Açıklama
             </span>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={4}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none ring-[var(--brand)] focus:ring-2"
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
             />
           </label>
           <div className="flex justify-end gap-2">

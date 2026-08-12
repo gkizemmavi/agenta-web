@@ -8,7 +8,8 @@ export type ListingCollection =
   | "secondhand"
   | "spare_parts"
   | "tutors"
-  | "helpers";
+  | "helpers"
+  | "craftsmen";
 
 export interface UserDoc {
   id: string;
@@ -98,9 +99,10 @@ export const LISTING_COLLECTIONS: {
   { key: "listings", label: "Vasıta" },
   { key: "estate", label: "Emlak" },
   { key: "secondhand", label: "İkinci El" },
-  { key: "spare_parts", label: "Yedek Parça / Ekipman" },
+  { key: "spare_parts", label: "Yedek Parça / Motosiklet" },
   { key: "tutors", label: "Eğitmen" },
   { key: "helpers", label: "Yardımcı" },
+  { key: "craftsmen", label: "Usta" },
 ];
 
 export function normalizeAgentType(type: string): string {
